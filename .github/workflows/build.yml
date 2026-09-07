@@ -1,4 +1,4 @@
-name: Build Android APK
+name: Build Android Target
 
 on:
   workflow_dispatch:
@@ -13,33 +13,57 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Inspect Files
-        run: |
-          echo "=== REPOSITORY STRUCTURE ==="
-          ls -la
-          find . -maxdepth 2 -not -path '*/.*'
-
       - name: Setup Java 17 LTS
         uses: actions/setup-java@v5
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Check Gradle & Build
+      - name: Inspect & Auto Build
         run: |
-          if [ -f "./gradlew" ]; then
+          echo "=== FILES IN REPOSITORY ==="
+          ls -la
+          
+          # Case 1: Agar kisi subfolder me gradlew maujood ho
+          GRADLEW_PATH=$(find . -name gradlew -type f | head -n 1)
+          
+          if [ -n "$GRADLEW_PATH" ]; then
+            echo "Gradlew mila: $GRADLEW_PATH"
+            BUILD_DIR=$(dirname "$GRADLEW_PATH")
+            cd "$BUILD_DIR"
             chmod +x ./gradlew
             ./gradlew assembleDebug --stacktrace
+            mkdir -p $GITHUB_WORKSPACE/output
+            find . -name "*.apk" -exec cp {} $GITHUB_WORKSPACE/output/ \;
           else
-            echo "::error::gradlew file nahi mili. Project Android Studio format me nahi hai ya files subfolder me hain."
-            exit 1
+            echo "Koi Gradle project nahi mila. Native Android C++ compilation execute ho rahi hai..."
+            
+            # Setup Android NDK Clang for ARM64 (Android phones)
+            NDK_BIN="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
+            CXX="$NDK_BIN/aarch64-linux-android33-clang++"
+            
+            mkdir -p $GITHUB_WORKSPACE/output
+            
+            if [ -f "CMakeLists.txt" ]; then
+              cmake -B build -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_LATEST_HOME/build/cmake/android.toolchain.cmake -DANDROID_ABI=arm64-v8a
+              cmake --build build
+              find build -type f -executable -exec cp {} $GITHUB_WORKSPACE/output/ \;
+            else
+              # Direct C++ compilation with NDK
+              CPP_FILES=$(find . -maxdepth 2 -name "*.cpp")
+              if [ -n "$CPP_FILES" ]; then
+                $CXX -O3 $CPP_FILES -o $GITHUB_WORKSPACE/output/cpp_compiler_arm64
+                echo "Android ARM64 binary build complete: cpp_compiler_arm64"
+              else
+                echo "::error::Repo me na Gradle mila aur na hi koi .cpp files!"
+                exit 1
+              fi
+            fi
           fi
 
-      - name: Upload APK Artifact
-        if: success()
+      - name: Upload Output
         uses: actions/upload-artifact@v4
         with:
-          name: Cpp_compiler-Debug-APK
-          path: app/build/outputs/apk/debug/*.apk
+          name: Cpp_compiler-Build-Output
+          path: output/*
           if-no-files-found: error
- 
