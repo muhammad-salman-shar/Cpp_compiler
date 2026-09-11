@@ -11,11 +11,14 @@ import { Editor } from "./components/Editor";
 import type { EditorHandle } from "./components/Editor";
 import { ConsolePanel } from "./components/Console";
 import type { Entry } from "./components/Console";
-import { Sidebar } from "./components/Sidebar";
+import { FileManager } from "./components/FileManager";
+import type { SavedFile } from "./components/FileManager";
+import { SplashScreen } from "./components/SplashScreen";
 import { SettingsPanel, loadSettings, saveSettings } from "./components/SettingsPanel";
 import type { Settings } from "./components/SettingsPanel";
 import { ProPopup } from "./components/ProPopup";
 import { LogoMark, IconPlay, IconSpinner, IconCheck, IconError, IconChevron, IconClose, IconPanel, IconCode, IconEraser } from "./components/icons";
+import { setupFileHandler, openFileWithPicker, saveFileWithPicker, isFileSystemAccessSupported } from "./lib/fileSystem";
 
 type Stage = "idle" | "lex" | "parse" | "exec" | "done" | "error";
 
@@ -64,6 +67,8 @@ export default function App() {
   const [settings, setSettings] = useState<Settings>(loadSettings());
   const [accumulatedInputs, setAccumulatedInputs] = useState<string[]>([]);
   const [isWaitingForInput, setIsWaitingForInput] = useState(false);
+  const [showSplash, setShowSplash] = useState(true);
+  const [currentFileName, setCurrentFileName] = useState<string | null>(null);
   
   // Apply theme to document
   useEffect(() => {
@@ -129,6 +134,16 @@ export default function App() {
     if (toastTimer.current) window.clearTimeout(toastTimer.current);
     toastTimer.current = window.setTimeout(() => setToast(null), 2800);
   }, []);
+
+  // Setup file handler for "Open With" functionality
+  useEffect(() => {
+    setupFileHandler((name, contents) => {
+      setCode(contents);
+      setCurrentFileName(name);
+      setActiveExample(null);
+      showToast(`Opened "${name}"`, "info");
+    });
+  }, [showToast]);
 
   /* ------------------------------ autosave ------------------------------ */
   useEffect(() => {
@@ -329,6 +344,11 @@ export default function App() {
 
   return (
     <div className="flex h-full flex-col overflow-hidden font-body text-mist-200">
+      {/* ================= splash screen ================= */}
+      {showSplash && (
+        <SplashScreen onComplete={() => setShowSplash(false)} />
+      )}
+
       {/* ================= header ================= */}
       <header className="relative z-20 flex h-14 shrink-0 items-center gap-3 border-b border-ink-700/60 bg-ink-900/90 px-3 sm:px-4">
         <button
@@ -428,7 +448,42 @@ export default function App() {
 
         {/* desktop sidebar */}
         <aside className="relative z-10 hidden w-[280px] shrink-0 border-r border-ink-700/60 bg-ink-850/95 lg:block">
-          <Sidebar examples={EXAMPLES} activeId={activeExample} onSelect={selectExample} onSettings={() => setSettingsOpen(true)} />
+          <FileManager
+            currentCode={code}
+            currentFileName={currentFileName}
+            onLoadFile={(file) => {
+              setCode(file.code);
+              setCurrentFileName(file.name);
+              setActiveExample(null);
+              setNavOpen(false);
+              setProblems([]);
+              setErrorLine(null);
+              showToast(`Loaded "${file.name}"`, "info");
+            }}
+            onSaveFile={(name, codeToSave) => {
+              setCurrentFileName(name);
+              showToast(`Saved "${name}"`, "ok");
+            }}
+            onDeleteFile={(id) => {
+              showToast("File deleted", "info");
+            }}
+            onRenameFile={(id, newName) => {
+              showToast(`Renamed to "${newName}"`, "ok");
+            }}
+            onNewFile={() => {
+              const name = prompt("Enter file name:", "untitled.cpp");
+              if (name) {
+                setCode("");
+                setCurrentFileName(name);
+                setActiveExample(null);
+                setNavOpen(false);
+                setProblems([]);
+                setErrorLine(null);
+                showToast(`Created "${name}"`, "info");
+              }
+            }}
+            onSettings={() => setSettingsOpen(true)}
+          />
         </aside>
 
         {/* mobile drawer */}
@@ -443,7 +498,42 @@ export default function App() {
                 </button>
               </div>
               <div className="min-h-0 flex-1">
-                <Sidebar examples={EXAMPLES} activeId={activeExample} onSelect={selectExample} onSettings={() => setSettingsOpen(true)} />
+                <FileManager
+                  currentCode={code}
+                  currentFileName={currentFileName}
+                  onLoadFile={(file) => {
+                    setCode(file.code);
+                    setCurrentFileName(file.name);
+                    setActiveExample(null);
+                    setNavOpen(false);
+                    setProblems([]);
+                    setErrorLine(null);
+                    showToast(`Loaded "${file.name}"`, "info");
+                  }}
+                  onSaveFile={(name, codeToSave) => {
+                    setCurrentFileName(name);
+                    showToast(`Saved "${name}"`, "ok");
+                  }}
+                  onDeleteFile={(id) => {
+                    showToast("File deleted", "info");
+                  }}
+                  onRenameFile={(id, newName) => {
+                    showToast(`Renamed to "${newName}"`, "ok");
+                  }}
+                  onNewFile={() => {
+                    const name = prompt("Enter file name:", "untitled.cpp");
+                    if (name) {
+                      setCode("");
+                      setCurrentFileName(name);
+                      setActiveExample(null);
+                      setNavOpen(false);
+                      setProblems([]);
+                      setErrorLine(null);
+                      showToast(`Created "${name}"`, "info");
+                    }
+                  }}
+                  onSettings={() => setSettingsOpen(true)}
+                />
               </div>
             </aside>
           </div>
@@ -465,6 +555,48 @@ export default function App() {
                 </span>
                 <span>{code.length} chars</span>
                 <span className="hidden text-pulse-500/80 sm:inline">UTF-8</span>
+                <button
+                  onClick={async () => {
+                    if (isFileSystemAccessSupported()) {
+                      const result = await openFileWithPicker();
+                      if (result) {
+                        setCode(result.contents);
+                        setCurrentFileName(result.name);
+                        showToast(`Opened "${result.name}"`, "info");
+                      }
+                    } else {
+                      showToast("File System Access API not supported", "err");
+                    }
+                  }}
+                  title="Open file from device"
+                  className="rounded-md p-1 text-mist-600 transition-colors hover:bg-ink-700/50 hover:text-mist-300 active:scale-90"
+                >
+                  <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="7 10 12 15 17 10" />
+                    <line x1="12" y1="15" x2="12" y2="3" />
+                  </svg>
+                </button>
+                <button
+                  onClick={async () => {
+                    if (isFileSystemAccessSupported()) {
+                      const success = await saveFileWithPicker(code, currentFileName || "untitled.cpp");
+                      if (success) {
+                        showToast(`Saved "${currentFileName || "untitled.cpp"}"`, "ok");
+                      }
+                    } else {
+                      showToast("File System Access API not supported", "err");
+                    }
+                  }}
+                  title="Save file to device"
+                  className="rounded-md p-1 text-mist-600 transition-colors hover:bg-ink-700/50 hover:text-mist-300 active:scale-90"
+                >
+                  <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="17 8 12 3 7 8" />
+                    <line x1="12" y1="3" x2="12" y2="15" />
+                  </svg>
+                </button>
                 <button
                   onClick={() => {
                     setCode("");
