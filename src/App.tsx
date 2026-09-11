@@ -48,7 +48,7 @@ export default function App() {
   const [activeExample, setActiveExample] = useState<string | null>(initial.exampleId);
   const [entries, setEntries] = useState<Entry[]>([]);
   const [problems, setProblems] = useState<Problem[]>([]);
-  const [tab, setTab] = useState<"output" | "problems" | "input">("output");
+  const [tab, setTab] = useState<"output" | "problems">("output");
   const [running, setRunning] = useState(false);
   const [stage, setStage] = useState<Stage>("idle");
   const [caret, setCaret] = useState({ ln: 1, col: 1 });
@@ -62,7 +62,6 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [proOpen, setProOpen] = useState(false);
   const [settings, setSettings] = useState<Settings>(loadSettings());
-  const [inputWarning, setInputWarning] = useState(false);
   
   // Apply theme to document
   useEffect(() => {
@@ -146,19 +145,12 @@ export default function App() {
 
   /* --------------------------------- run --------------------------------- */
 
-  const run = useCallback(() => {
+  const run = useCallback((stdinOverride?: string) => {
     if (runningRef.current) return;
-    
-    // Check if input is required but not provided
-    if (needsInput && stdinRef.current.trim() === "") {
-      setInputWarning(true);
-      setTab("input");
-      setTimeout(() => setInputWarning(false), 3000);
-      return;
-    }
     
     const src = codeRef.current;
     const lines = src.split("\n");
+    const stdinToUse = stdinOverride !== undefined ? stdinOverride : stdinRef.current;
 
     runningRef.current = true;
     setRunning(true);
@@ -221,7 +213,7 @@ export default function App() {
           const t0 = performance.now();
           const out: string[] = [];
           try {
-            const res = runProgram(ast, stdinRef.current, (line) => out.push(line));
+            const res = runProgram(ast, stdinToUse, (line) => out.push(line));
             const ms = performance.now() - t0;
             setEntries((prev) => [
               ...prev,
@@ -370,7 +362,7 @@ export default function App() {
           </label>
 
           <button
-            onClick={run}
+            onClick={() => run()}
             disabled={running}
             className="run-glow flex h-9 items-center gap-2 rounded-lg bg-ember-500 px-3.5 font-display text-[13px] font-bold tracking-widest text-ink-950 transition-all hover:bg-ember-400 active:scale-95 disabled:cursor-not-allowed disabled:opacity-70 sm:px-4"
           >
@@ -463,8 +455,6 @@ export default function App() {
               running={running}
               hasRun={hasRun}
               needsInput={needsInput}
-              stdin={stdin}
-              onStdin={setStdin}
               timeMs={stats?.timeMs ?? null}
               onRun={run}
             />
@@ -507,14 +497,6 @@ export default function App() {
         >
           {toast.tone === "ok" ? <IconCheck className="h-4 w-4" /> : toast.tone === "err" ? <IconError className="h-4 w-4" /> : <IconCode className="h-4 w-4" />}
           {toast.msg}
-        </div>
-      )}
-      
-      {/* ================= input warning ================= */}
-      {inputWarning && (
-        <div className="toast-in fixed bottom-20 left-1/2 z-50 -translate-x-1/2 flex items-center gap-2 rounded-lg border border-ember-500/40 bg-ink-800 px-4 py-2.5 text-[13px] font-medium text-ember-300 shadow-[0_12px_36px_-8px_rgba(0,0,0,0.7)]">
-          <IconError className="h-4 w-4" />
-          Please enter input before running this program.
         </div>
       )}
       
