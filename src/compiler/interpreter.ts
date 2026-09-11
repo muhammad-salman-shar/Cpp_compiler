@@ -88,11 +88,17 @@ class StdinReader {
 
 export interface RunResult { exitCode: number; ops: number }
 
+export interface InputRequest {
+  prompt: string;
+  resolve: (value: string) => void;
+}
+
 interface Ctx {
   funcs: Map<string, FuncDef>;
   globals: Scope;
   stdin: StdinReader;
   out: (line: string) => void;
+  onInput?: (prompt: string) => Promise<string>;
   buffer: string;
   ops: number;
   depth: number;

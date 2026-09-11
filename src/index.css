@@ -42,6 +42,24 @@
   --color-sky-lt: #8ab8ef;
 }
 
+/* Light theme overrides */
+[data-theme="light"] {
+  --color-ink-950: #ffffff;
+  --color-ink-900: #f9fafb;
+  --color-ink-850: #f3f4f6;
+  --color-ink-800: #e5e7eb;
+  --color-ink-750: #d1d5db;
+  --color-ink-700: #9ca3af;
+  --color-ink-600: #6b7280;
+
+  --color-mist-100: #111827;
+  --color-mist-200: #1f2937;
+  --color-mist-300: #374151;
+  --color-mist-400: #4b5563;
+  --color-mist-500: #6b7280;
+  --color-mist-600: #9ca3af;
+}
+
 html, body, #root { height: 100%; }
 
 body {

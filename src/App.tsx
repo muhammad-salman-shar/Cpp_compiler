@@ -64,6 +64,19 @@ export default function App() {
   const [settings, setSettings] = useState<Settings>(loadSettings());
   const [inputWarning, setInputWarning] = useState(false);
   
+  // Apply theme to document
+  useEffect(() => {
+    const theme = settings.theme;
+    const root = document.documentElement;
+    
+    if (theme === "system") {
+      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      root.setAttribute("data-theme", prefersDark ? "dark" : "light");
+    } else {
+      root.setAttribute("data-theme", theme);
+    }
+  }, [settings.theme]);
+  
   // Detect if code uses cin or getline (token-based detection)
   const needsInput = (() => {
     try {
@@ -431,11 +444,15 @@ export default function App() {
                 onCaret={(ln, col) => setCaret({ ln, col })}
                 onRun={run}
                 errorLine={errorLine}
+                fontSize={settings.fontSize}
+                tabSize={settings.tabSize}
+                wordWrap={settings.wordWrap}
+                lineNumbers={settings.lineNumbers}
               />
             </div>
           </section>
 
-          <section className="h-[38vh] shrink-0 lg:h-auto lg:w-[400px] xl:w-[450px]">
+          <section className="shrink-0 lg:h-auto lg:w-[400px] xl:w-[450px]" style={{ height: `${settings.outputPanelSize}vh` }}>
             <ConsolePanel
               entries={entries}
               problems={problems}
