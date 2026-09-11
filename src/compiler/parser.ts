@@ -537,6 +537,11 @@ class Parser {
       this.next(); this.next();
       return this.parsePrimary();
     }
+    // Allow cin and cout as primary expressions (for member calls like cin.ignore())
+    if (t.kind === "kw" && (t.v === "cin" || t.v === "cout")) {
+      this.next();
+      return { node: "ident", name: t.v, line: t.line, col: t.col };
+    }
     if (t.kind === "ident") { this.next(); return { node: "ident", name: t.v, line: t.line, col: t.col }; }
     if (t.kind === "pun" && t.v === "(") {
       this.next();
