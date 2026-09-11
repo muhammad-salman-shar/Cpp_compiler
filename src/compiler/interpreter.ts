@@ -227,14 +227,37 @@ function execVarDecl(s: VarDecl, scope: Scope, ctx: Ctx): void {
           : defaultValue(vecType.elem);
         value = { __vec: true, elem: vecType.elem, items: Array.from({ length: n }, () => fill) };
       } else if (d.init.node === "vecinit") {
-        if (declaredType.kind !== "vector") throw new RuntimeError(`cannot use a brace list to initialize ${typeLabel(declaredType)}`, d.line);
-        const vecType = declaredType;
-        value = { __vec: true, elem: vecType.elem, items: d.init.items.map((it) => coerce(evaluate(it, scope, ctx), vecType.elem, d.line)) };
+        if (declaredType.kind === "vector") {
+          const vecType = declaredType;
+          value = { __vec: true, elem: vecType.elem, items: d.init.items.map((it) => coerce(evaluate(it, scope, ctx), vecType.elem, d.line)) };
+        } else if (declaredType.kind === "array") {
+          const arrType = declaredType;
+          const items = d.init.items.map((it) => coerce(evaluate(it, scope, ctx), arrType.elem, d.line));
+          if (items.length > arrType.size) {
+            throw new RuntimeError(`too many initializers for array of size ${arrType.size} (got ${items.length})`, d.line);
+          }
+          // Pad with default values if fewer initializers than size
+          while (items.length < arrType.size) {
+            items.push(defaultValue(arrType.elem));
+          }
+          value = { __vec: true, elem: arrType.elem, items };
+        } else {
+          throw new RuntimeError(`cannot use a brace list to initialize ${typeLabel(declaredType)}`, d.line);
+        }
       } else {
         value = coerce(evaluate(d.init, scope, ctx), declaredType, d.line);
       }
     } else {
-      value = declaredType.kind === "vector" ? { __vec: true, elem: { kind: "int" }, items: [] } : defaultValue(declaredType);
+      if (declaredType.kind === "vector") {
+        value = { __vec: true, elem: { kind: "int" }, items: [] };
+      } else if (declaredType.kind === "array") {
+        // Initialize array with default values
+        const arrType = declaredType;
+        const items = Array.from({ length: arrType.size }, () => defaultValue(arrType.elem));
+        value = { __vec: true, elem: arrType.elem, items };
+      } else {
+        value = defaultValue(declaredType);
+      }
     }
     if (scope.vars.has(d.name)) throw new RuntimeError(`redeclaration of '${d.name}' in the same scope`, d.line);
     scope.define(d.name, { value, type: declaredType, isConst: s.isConst });
@@ -670,6 +693,13 @@ function callMethod(e: Expr & { node: "method" }, scope: Scope, ctx: Ctx): Val {
 
   if (isVec(obj.v)) {
     const vec = obj.v;
+    const isArray = obj.t.kind === "array";
+    
+    // Arrays don't support mutating operations
+    if (isArray && (e.name === "push_back" || e.name === "pop_back" || e.name === "clear")) {
+      throw new RuntimeError(`C-style arrays have fixed size — '${e.name}()' is not allowed on arrays`, e.line);
+    }
+    
     switch (e.name) {
       case "size": case "length": return I(vec.items.length);
       case "empty": return B(vec.items.length === 0);
@@ -684,10 +714,10 @@ function callMethod(e: Expr & { node: "method" }, scope: Scope, ctx: Ctx): Val {
         vec.items.pop();
         return { v: 0, t: { kind: "void" } };
       case "front":
-        if (vec.items.length === 0) throw new RuntimeError("front() on an empty vector", e.line);
+        if (vec.items.length === 0) throw new RuntimeError(`front() on an empty ${isArray ? "array" : "vector"}`, e.line);
         return { v: vec.items[0], t: vec.elem };
       case "back":
-        if (vec.items.length === 0) throw new RuntimeError("back() on an empty vector", e.line);
+        if (vec.items.length === 0) throw new RuntimeError(`back() on an empty ${isArray ? "array" : "vector"}`, e.line);
         return { v: vec.items[vec.items.length - 1], t: vec.elem };
       case "clear":
         vec.items = [];

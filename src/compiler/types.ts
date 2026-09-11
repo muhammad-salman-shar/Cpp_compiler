@@ -41,10 +41,16 @@ export type CType =
   | { kind: "string" }
   | { kind: "void" }
   | { kind: "auto" }
-  | { kind: "vector"; elem: CType };
+  | { kind: "vector"; elem: CType }
+  | { kind: "array"; elem: CType; size: number };
 
-export const typeLabel = (t: CType): string =>
-  t.kind === "vector" ? `std::vector<${typeLabel(t.elem)}>:`.replace(">:", ">") : t.kind === "auto" ? "auto" : t.kind === "string" ? "std::string" : t.kind;
+export const typeLabel = (t: CType): string => {
+  if (t.kind === "vector") return `std::vector<${typeLabel(t.elem)}>`;
+  if (t.kind === "array") return `${typeLabel(t.elem)}[${t.size}]`;
+  if (t.kind === "auto") return "auto";
+  if (t.kind === "string") return "std::string";
+  return t.kind;
+};
 
 /* ------------------------------ AST ------------------------------ */
 

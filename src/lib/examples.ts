@@ -198,4 +198,42 @@ int main() {
 }
 `,
   },
+  {
+    id: "arrays",
+    title: "C-style Arrays",
+    blurb: "Fixed-size arrays with initialization and element access.",
+    tags: ["arrays", "loops"],
+    code: `#include <iostream>
+using namespace std;
+
+int main() {
+    // Declare and initialize an array
+    int arr[5] = {10, 20, 30, 40, 50};
+    
+    cout << "Array elements:" << endl;
+    for (int i = 0; i < 5; i++) {
+        cout << "arr[" << i << "] = " << arr[i] << endl;
+    }
+    
+    // Modify elements
+    arr[2] = 99;
+    cout << "\\nAfter modification:" << endl;
+    cout << "arr[2] = " << arr[2] << endl;
+    
+    // Array without initialization
+    int nums[3];
+    nums[0] = 1;
+    nums[1] = 2;
+    nums[2] = 3;
+    
+    cout << "\\nSecond array: ";
+    for (int i = 0; i < 3; i++) {
+        cout << nums[i] << " ";
+    }
+    cout << endl;
+    
+    return 0;
+}
+`,
+  },
 ];
