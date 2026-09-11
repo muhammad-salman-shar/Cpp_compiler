@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Problem } from "../compiler/types";
 import { IconCheck, IconEraser, IconError, IconTerminal, IconWarn } from "./icons";
 
@@ -275,6 +275,29 @@ function EmptyState({ hasRun }: { hasRun: boolean }) {
 }
 
 function InputPanel({ stdin, onStdin, onRun }: { stdin: string; onStdin: (v: string) => void; onRun: () => void }) {
+  const [mode, setMode] = useState<"batch" | "step">("batch");
+  const [stepValues, setStepValues] = useState<string[]>(["", "", ""]);
+  const [currentStep, setCurrentStep] = useState(0);
+
+  const handleStepSubmit = (index: number) => {
+    if (index < stepValues.length - 1) {
+      setCurrentStep(index + 1);
+    }
+  };
+
+  const handleStepChange = (index: number, value: string) => {
+    const newValues = [...stepValues];
+    newValues[index] = value;
+    setStepValues(newValues);
+  };
+
+  const handleRunWithSteps = () => {
+    // Combine all step values into stdin
+    const combinedInput = stepValues.filter(v => v.trim() !== "").join("\n");
+    onStdin(combinedInput);
+    onRun();
+  };
+
   return (
     <div className="pop-in flex flex-col gap-3">
       <div className="flex items-center justify-between">
@@ -285,7 +308,7 @@ function InputPanel({ stdin, onStdin, onRun }: { stdin: string; onStdin: (v: str
           </p>
         </div>
         <button
-          onClick={onRun}
+          onClick={mode === "batch" ? onRun : handleRunWithSteps}
           className="flex h-8 items-center gap-1.5 rounded-lg bg-ember-500 px-3 font-display text-[11px] font-bold tracking-wider text-ink-950 transition-all hover:bg-ember-400 active:scale-95"
         >
           <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
@@ -294,20 +317,112 @@ function InputPanel({ stdin, onStdin, onRun }: { stdin: string; onStdin: (v: str
           RUN
         </button>
       </div>
-      <textarea
-        value={stdin}
-        onChange={(e) => onStdin(e.target.value)}
-        placeholder={"18\nMuhammad Salman Shar"}
-        spellCheck={false}
-        className="h-40 w-full resize-none rounded-lg border border-ink-700/70 bg-ink-950/70 px-3 py-2 font-mono text-[12px] leading-[19px] text-mist-200 placeholder:text-mist-600/70 transition-colors focus:border-ember-500/60 focus:outline-none focus:ring-2 focus:ring-ember-500/15"
-      />
-      <div className="flex items-center gap-2 text-[10.5px] text-mist-600">
-        <span className="font-mono text-mist-500">Tip:</span>
-        <span>
-          <span className="font-mono">cin &gt;&gt;</span> reads whitespace-separated tokens,{" "}
-          <span className="font-mono">getline</span> reads full lines
-        </span>
+
+      {/* Mode Toggle */}
+      <div className="flex gap-1 rounded-lg border border-ink-700/60 bg-ink-900/60 p-1">
+        <button
+          onClick={() => setMode("batch")}
+          className={`flex-1 rounded-md px-3 py-1.5 font-display text-[11px] font-semibold tracking-wide transition-all ${
+            mode === "batch"
+              ? "bg-ember-500/20 text-ember-400"
+              : "text-mist-500 hover:text-mist-300"
+          }`}
+        >
+          Batch Input
+        </button>
+        <button
+          onClick={() => setMode("step")}
+          className={`flex-1 rounded-md px-3 py-1.5 font-display text-[11px] font-semibold tracking-wide transition-all ${
+            mode === "step"
+              ? "bg-ember-500/20 text-ember-400"
+              : "text-mist-500 hover:text-mist-300"
+          }`}
+        >
+          Step-by-Step
+        </button>
       </div>
+
+      {/* Batch Mode */}
+      {mode === "batch" && (
+        <>
+          <textarea
+            value={stdin}
+            onChange={(e) => onStdin(e.target.value)}
+            placeholder={"18\nMuhammad Salman Shar"}
+            spellCheck={false}
+            className="h-40 w-full resize-none rounded-lg border border-ink-700/70 bg-ink-950/70 px-3 py-2 font-mono text-[12px] leading-[19px] text-mist-200 placeholder:text-mist-600/70 transition-colors focus:border-ember-500/60 focus:outline-none focus:ring-2 focus:ring-ember-500/15"
+          />
+          <div className="flex items-center gap-2 text-[10.5px] text-mist-600">
+            <span className="font-mono text-mist-500">Tip:</span>
+            <span>
+              <span className="font-mono">cin &gt;&gt;</span> reads whitespace-separated tokens,{" "}
+              <span className="font-mono">getline</span> reads full lines
+            </span>
+          </div>
+        </>
+      )}
+
+      {/* Step-by-Step Mode */}
+      {mode === "step" && (
+        <div className="flex flex-col gap-3">
+          {stepValues.map((value, index) => {
+            const isActive = index === currentStep;
+            const isCompleted = index < currentStep && value.trim() !== "";
+            const isDisabled = index > currentStep;
+
+            return (
+              <div
+                key={index}
+                className={`rounded-lg border p-3 transition-all ${
+                  isActive
+                    ? "border-ember-500/60 bg-ember-500/5"
+                    : isCompleted
+                      ? "border-pulse-500/40 bg-pulse-500/5"
+                      : "border-ink-700/60 bg-ink-900/40"
+                }`}
+              >
+                <div className="mb-2 flex items-center justify-between">
+                  <span className={`font-display text-[11px] font-semibold tracking-wide ${
+                    isActive ? "text-ember-400" : isCompleted ? "text-pulse-400" : "text-mist-500"
+                  }`}>
+                    Input {index + 1}
+                  </span>
+                  {isCompleted && (
+                    <span className="flex items-center gap-1 text-[10px] text-pulse-400">
+                      <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <path d="m5 12.5 4.5 4.5L19 7.5" />
+                      </svg>
+                      Done
+                    </span>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={value}
+                    onChange={(e) => handleStepChange(index, e.target.value)}
+                    disabled={isDisabled}
+                    placeholder={`Enter value ${index + 1}...`}
+                    className="flex-1 rounded-md border border-ink-700/70 bg-ink-950/70 px-2.5 py-1.5 font-mono text-[12px] text-mist-200 placeholder:text-mist-600/70 transition-colors focus:border-ember-500/60 focus:outline-none disabled:opacity-50"
+                  />
+                  {isActive && value.trim() !== "" && (
+                    <button
+                      onClick={() => handleStepSubmit(index)}
+                      className="rounded-md bg-ember-500 px-3 py-1.5 font-display text-[10px] font-bold tracking-wider text-ink-950 transition-all hover:bg-ember-400 active:scale-95"
+                    >
+                      {index < stepValues.length - 1 ? "NEXT" : "RUN"}
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+          <div className="flex items-center gap-2 text-[10.5px] text-mist-600">
+            <span className="font-mono text-mist-500">Tip:</span>
+            <span>Fill each input in order, then press RUN to execute</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
