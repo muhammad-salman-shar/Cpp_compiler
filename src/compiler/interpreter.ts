@@ -25,6 +25,12 @@ class Scope {
 class BreakSig {}
 class ContinueSig {}
 class ReturnSig { constructor(public value: Val | null) {} }
+export class InputPromptSignal extends Error {
+  constructor(public outputSoFar: string) {
+    super("Input required");
+    this.name = "InputPromptSignal";
+  }
+}
 
 const OP_LIMIT = 8_000_000;
 const DEPTH_LIMIT = 256;
@@ -53,6 +59,14 @@ class StdinReader {
     if (this.li >= this.lines.length) return null;
     const rest = this.lines[this.li].slice(this.col);
     this.li++; this.col = 0;
+    
+    // If we read an empty line and we're now at EOF, treat it as EOF
+    // This handles the case where input like "18\n" splits into ["18", ""]
+    // and we need to prompt for more input instead of returning empty string
+    if (rest === "" && this.li >= this.lines.length) {
+      return null;
+    }
+    
     return rest;
   }
 
@@ -88,11 +102,17 @@ class StdinReader {
 
 export interface RunResult { exitCode: number; ops: number }
 
+export interface InputRequest {
+  prompt: string;
+  resolve: (value: string) => void;
+}
+
 interface Ctx {
   funcs: Map<string, FuncDef>;
   globals: Scope;
   stdin: StdinReader;
   out: (line: string) => void;
+  onInput?: (prompt: string) => Promise<string>;
   buffer: string;
   ops: number;
   depth: number;
@@ -217,7 +237,14 @@ function execStmt(s: Stmt, scope: Scope, ctx: Ctx): void {
       for (const t of s.targets) {
         const cell = resolveLValue(t, scope, ctx);
         const tok = ctx.stdin.nextToken();
-        if (tok === null) throw new RuntimeError("cin: no more input — add data in the STDIN panel and run again", s.line);
+        if (tok === null) {
+          // Flush buffer before signaling
+          if (ctx.buffer.length > 0) {
+            ctx.out(ctx.buffer);
+            ctx.buffer = "";
+          }
+          throw new InputPromptSignal("");
+        }
         cell.value = parseToken(tok, cell.type, s.line);
       }
       break;
@@ -226,7 +253,16 @@ function execStmt(s: Stmt, scope: Scope, ctx: Ctx): void {
       const cell = scope.lookup(s.target);
       if (!cell) throw new RuntimeError(`undeclared variable '${s.target}'`, s.line);
       if (cell.type.kind !== "string") throw new RuntimeError(`getline needs a std::string variable, got ${typeLabel(cell.type)}`, s.line);
-      cell.value = ctx.stdin.nextLine() ?? "";
+      const line = ctx.stdin.nextLine();
+      if (line === null) {
+        // Flush buffer before signaling
+        if (ctx.buffer.length > 0) {
+          ctx.out(ctx.buffer);
+          ctx.buffer = "";
+        }
+        throw new InputPromptSignal("");
+      }
+      cell.value = line;
       break;
     }
     default: break;

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { lex } from "./compiler/lexer";
 import { parse } from "./compiler/parser";
 import { collectDiagnostics } from "./compiler/diagnostics";
-import { runProgram } from "./compiler/interpreter";
+import { runProgram, InputPromptSignal } from "./compiler/interpreter";
 import { CompileError, RuntimeError } from "./compiler/types";
 import type { Problem } from "./compiler/types";
 import { EXAMPLES } from "./lib/examples";
@@ -15,7 +15,7 @@ import { Sidebar } from "./components/Sidebar";
 import { SettingsPanel, loadSettings, saveSettings } from "./components/SettingsPanel";
 import type { Settings } from "./components/SettingsPanel";
 import { ProPopup } from "./components/ProPopup";
-import { LogoMark, IconPlay, IconSpinner, IconCheck, IconError, IconChevron, IconClose, IconPanel, IconCode } from "./components/icons";
+import { LogoMark, IconPlay, IconSpinner, IconCheck, IconError, IconChevron, IconClose, IconPanel, IconCode, IconEraser } from "./components/icons";
 
 type Stage = "idle" | "lex" | "parse" | "exec" | "done" | "error";
 
@@ -48,7 +48,7 @@ export default function App() {
   const [activeExample, setActiveExample] = useState<string | null>(initial.exampleId);
   const [entries, setEntries] = useState<Entry[]>([]);
   const [problems, setProblems] = useState<Problem[]>([]);
-  const [tab, setTab] = useState<"output" | "problems" | "input">("output");
+  const [tab, setTab] = useState<"output" | "problems">("output");
   const [running, setRunning] = useState(false);
   const [stage, setStage] = useState<Stage>("idle");
   const [caret, setCaret] = useState({ ln: 1, col: 1 });
@@ -62,7 +62,21 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [proOpen, setProOpen] = useState(false);
   const [settings, setSettings] = useState<Settings>(loadSettings());
-  const [inputWarning, setInputWarning] = useState(false);
+  const [accumulatedInputs, setAccumulatedInputs] = useState<string[]>([]);
+  const [isWaitingForInput, setIsWaitingForInput] = useState(false);
+  
+  // Apply theme to document
+  useEffect(() => {
+    const theme = settings.theme;
+    const root = document.documentElement;
+    
+    if (theme === "system") {
+      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      root.setAttribute("data-theme", prefersDark ? "dark" : "light");
+    } else {
+      root.setAttribute("data-theme", theme);
+    }
+  }, [settings.theme]);
   
   // Detect if code uses cin or getline (token-based detection)
   const needsInput = (() => {
@@ -133,19 +147,18 @@ export default function App() {
 
   /* --------------------------------- run --------------------------------- */
 
-  const run = useCallback(() => {
+  const run = useCallback((stdinOverride?: string) => {
     if (runningRef.current) return;
-    
-    // Check if input is required but not provided
-    if (needsInput && stdinRef.current.trim() === "") {
-      setInputWarning(true);
-      setTab("input");
-      setTimeout(() => setInputWarning(false), 3000);
-      return;
-    }
     
     const src = codeRef.current;
     const lines = src.split("\n");
+    const stdinToUse = stdinOverride !== undefined ? stdinOverride : stdinRef.current;
+
+    // If starting a fresh run (not from input submission), clear accumulated inputs
+    if (stdinOverride === undefined) {
+      setAccumulatedInputs([]);
+      setIsWaitingForInput(false);
+    }
 
     runningRef.current = true;
     setRunning(true);
@@ -208,7 +221,7 @@ export default function App() {
           const t0 = performance.now();
           const out: string[] = [];
           try {
-            const res = runProgram(ast, stdinRef.current, (line) => out.push(line));
+            const res = runProgram(ast, stdinToUse, (line) => out.push(line));
             const ms = performance.now() - t0;
             setEntries((prev) => [
               ...prev,
@@ -216,10 +229,26 @@ export default function App() {
             ]);
             setStats({ tokens: tokens.length - 1, timeMs: ms, exitCode: res.exitCode, ops: res.ops });
             setStage("done");
+            setIsWaitingForInput(false);
             showToast(`Executed in ${ms < 1 ? ms.toFixed(1) : Math.round(ms)} ms`, "ok");
           } catch (e) {
             const ms = performance.now() - t0;
             const partial = out.map((l) => mk("out", l));
+            
+            // Check if it's an InputPromptSignal
+            if (e instanceof InputPromptSignal) {
+              // Add the output so far to entries
+              setEntries((prev) => [
+                ...prev,
+                ...partial,
+              ]);
+              setIsWaitingForInput(true);
+              setStage("done");
+              runningRef.current = false;
+              setRunning(false);
+              return;
+            }
+            
             if (e instanceof RuntimeError) {
               const line = e.line ?? 1;
               setEntries((prev) => [
@@ -243,6 +272,21 @@ export default function App() {
 
   const runRef = useRef(run);
   runRef.current = run;
+
+  const handleInputSubmit = useCallback((input: string) => {
+    // Add the input to accumulated inputs
+    const newInputs = [...accumulatedInputs, input];
+    setAccumulatedInputs(newInputs);
+    
+    // Add the user's input to the output display
+    setEntries((prev) => [
+      ...prev,
+      mk("out", input),
+    ]);
+    
+    // Re-run the program with accumulated inputs
+    run(newInputs.join("\n") + "\n");
+  }, [accumulatedInputs, run, mk]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -357,7 +401,7 @@ export default function App() {
           </label>
 
           <button
-            onClick={run}
+            onClick={() => run()}
             disabled={running}
             className="run-glow flex h-9 items-center gap-2 rounded-lg bg-ember-500 px-3.5 font-display text-[13px] font-bold tracking-widest text-ink-950 transition-all hover:bg-ember-400 active:scale-95 disabled:cursor-not-allowed disabled:opacity-70 sm:px-4"
           >
@@ -421,6 +465,16 @@ export default function App() {
                 </span>
                 <span>{code.length} chars</span>
                 <span className="hidden text-pulse-500/80 sm:inline">UTF-8</span>
+                <button
+                  onClick={() => {
+                    setCode("");
+                    editorRef.current?.focus();
+                  }}
+                  title="Clear editor"
+                  className="rounded-md p-1 text-mist-600 transition-colors hover:bg-ink-700/50 hover:text-mist-300 active:scale-90"
+                >
+                  <IconEraser className="h-3.5 w-3.5" />
+                </button>
               </div>
             </div>
             <div className="min-h-0 flex-1">
@@ -431,25 +485,33 @@ export default function App() {
                 onCaret={(ln, col) => setCaret({ ln, col })}
                 onRun={run}
                 errorLine={errorLine}
+                fontSize={settings.fontSize}
+                tabSize={settings.tabSize}
+                wordWrap={settings.wordWrap}
+                lineNumbers={settings.lineNumbers}
               />
             </div>
           </section>
 
-          <section className="h-[38vh] shrink-0 lg:h-auto lg:w-[400px] xl:w-[450px]">
+          <section className="shrink-0 lg:h-auto lg:w-[400px] xl:w-[450px]" style={{ height: `${settings.outputPanelSize}vh` }}>
             <ConsolePanel
               entries={entries}
               problems={problems}
               tab={tab}
               onTab={setTab}
-              onClear={() => setEntries([])}
+              onClear={() => {
+                setEntries([]);
+                setAccumulatedInputs([]);
+                setIsWaitingForInput(false);
+              }}
               onJump={jumpTo}
               running={running}
               hasRun={hasRun}
               needsInput={needsInput}
-              stdin={stdin}
-              onStdin={setStdin}
               timeMs={stats?.timeMs ?? null}
               onRun={run}
+              isWaitingForInput={isWaitingForInput}
+              onInputSubmit={handleInputSubmit}
             />
           </section>
         </main>
@@ -490,14 +552,6 @@ export default function App() {
         >
           {toast.tone === "ok" ? <IconCheck className="h-4 w-4" /> : toast.tone === "err" ? <IconError className="h-4 w-4" /> : <IconCode className="h-4 w-4" />}
           {toast.msg}
-        </div>
-      )}
-      
-      {/* ================= input warning ================= */}
-      {inputWarning && (
-        <div className="toast-in fixed bottom-20 left-1/2 z-50 -translate-x-1/2 flex items-center gap-2 rounded-lg border border-ember-500/40 bg-ink-800 px-4 py-2.5 text-[13px] font-medium text-ember-300 shadow-[0_12px_36px_-8px_rgba(0,0,0,0.7)]">
-          <IconError className="h-4 w-4" />
-          Please enter input before running this program.
         </div>
       )}
       

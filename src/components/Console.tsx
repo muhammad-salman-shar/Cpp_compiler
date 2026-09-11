@@ -15,29 +15,51 @@ export interface Entry {
 interface ConsoleProps {
   entries: Entry[];
   problems: Problem[];
-  tab: "output" | "problems" | "input";
-  onTab: (t: "output" | "problems" | "input") => void;
+  tab: "output" | "problems";
+  onTab: (t: "output" | "problems") => void;
   onClear: () => void;
   onJump: (line: number, col?: number) => void;
   running: boolean;
   hasRun: boolean;
   needsInput: boolean;
-  stdin: string;
-  onStdin: (v: string) => void;
   timeMs: number | null;
-  onRun: () => void;
+  onRun: (stdin?: string) => void;
+  isWaitingForInput?: boolean;
+  onInputSubmit?: (input: string) => void;
 }
 
-export function ConsolePanel({ entries, problems, tab, onTab, onClear, onJump, running, hasRun, needsInput, stdin, onStdin, timeMs, onRun }: ConsoleProps) {
+export function ConsolePanel({ entries, problems, tab, onTab, onClear, onJump, running, hasRun, needsInput, timeMs, onRun, isWaitingForInput, onInputSubmit }: ConsoleProps) {
   const bodyRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [currentInput, setCurrentInput] = useState("");
 
   useEffect(() => {
     const el = bodyRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [entries.length, tab, problems.length]);
+  }, [entries.length, tab, problems.length, isWaitingForInput]);
+
+  // Focus input when waiting for input
+  useEffect(() => {
+    if (isWaitingForInput && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [isWaitingForInput]);
 
   const errCount = problems.filter((p) => p.severity === "error").length;
   const warnCount = problems.length - errCount;
+
+  const handleSubmitInput = () => {
+    if (!currentInput.trim() || !onInputSubmit) return;
+    onInputSubmit(currentInput);
+    setCurrentInput("");
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmitInput();
+    }
+  };
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-ink-950/80">
@@ -51,15 +73,6 @@ export function ConsolePanel({ entries, problems, tab, onTab, onClear, onJump, r
           count={problems.length}
           tone={errCount > 0 ? "error" : warnCount > 0 ? "warn" : "ok"}
         />
-        {needsInput && (
-          <TabBtn
-            active={tab === "input"}
-            onClick={() => onTab("input")}
-            label="Input"
-            count={0}
-            tone="neutral"
-          />
-        )}
         <div className="ml-auto flex items-center gap-2 pb-1">
           {tab === "output" && timeMs !== null && !running && (
             <span className="font-mono text-[10px] text-mist-600">
@@ -80,26 +93,53 @@ export function ConsolePanel({ entries, problems, tab, onTab, onClear, onJump, r
       {/* body */}
       <div ref={bodyRef} className="min-h-0 flex-1 overflow-y-auto px-3 py-3 font-mono text-[12.5px] leading-[20px]">
         {tab === "output" ? (
-          entries.length === 0 ? (
-            <EmptyState hasRun={hasRun} />
+          entries.length === 0 && !isWaitingForInput ? (
+            <EmptyState hasRun={hasRun} needsInput={needsInput} onRun={onRun} />
           ) : (
             <>
               {entries.map((e, i) => (
                 <EntryRow key={e.id} e={e} index={i} onJump={onJump} />
               ))}
-              {!running && (
+              {!running && !isWaitingForInput && (
                 <div className="mt-1 flex items-center gap-2 pl-0.5">
                   <span className="caret-blink inline-block h-[15px] w-[8px] bg-pulse-400/90" />
                 </div>
               )}
             </>
           )
-        ) : tab === "problems" ? (
-          <ProblemsList problems={problems} onJump={onJump} hasRun={hasRun} />
         ) : (
-          <InputPanel stdin={stdin} onStdin={onStdin} onRun={onRun} />
+          <ProblemsList problems={problems} onJump={onJump} hasRun={hasRun} />
         )}
       </div>
+
+      {/* inline input bar - shown when waiting for input */}
+      {isWaitingForInput && (
+        <div className="border-t border-ink-700/60 bg-ink-900/80 p-2">
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-[12px] text-pulse-400">&gt;</span>
+            <input
+              ref={inputRef}
+              type="text"
+              value={currentInput}
+              onChange={(e) => setCurrentInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Enter input..."
+              className="flex-1 rounded-md border border-ink-700/70 bg-ink-950/70 px-2.5 py-1.5 font-mono text-[12px] text-mist-200 placeholder:text-mist-600/70 transition-colors focus:border-ember-500/60 focus:outline-none focus:ring-2 focus:ring-ember-500/15"
+              disabled={running}
+            />
+            <button
+              onClick={handleSubmitInput}
+              disabled={running || !currentInput.trim()}
+              className="flex h-8 items-center gap-1.5 rounded-lg bg-ember-500 px-3 font-display text-[11px] font-bold tracking-wider text-ink-950 transition-all hover:bg-ember-400 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
+              title="Submit (Enter)"
+            >
+              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M5 12h14M12 5l7 7-7 7" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -249,7 +289,7 @@ function ProblemsList({ problems, onJump, hasRun }: { problems: Problem[]; onJum
   );
 }
 
-function EmptyState({ hasRun }: { hasRun: boolean }) {
+function EmptyState({ hasRun, needsInput, onRun }: { hasRun: boolean; needsInput: boolean; onRun: (stdin?: string) => void }) {
   return (
     <div className="pop-in flex h-full flex-col items-center justify-center gap-3 pb-8 text-center">
       <span className="relative grid h-16 w-16 place-items-center rounded-2xl border border-ink-600 bg-ink-800/80 text-mist-500 shadow-[0_10px_30px_-12px_rgba(0,0,0,0.8)]">
@@ -258,171 +298,35 @@ function EmptyState({ hasRun }: { hasRun: boolean }) {
       </span>
       <div>
         <p className="font-display text-base font-semibold tracking-wide text-mist-300">
-          {hasRun ? "Console cleared" : "Awaiting compilation"}
+          {hasRun ? "Console cleared" : needsInput ? "Ready to run" : "Awaiting compilation"}
         </p>
         <p className="mx-auto mt-1 max-w-[250px] text-[11.5px] leading-relaxed text-mist-600">
-          Program output streams here line by line — stdout, diagnostics and the exit code.
+          {needsInput 
+            ? "This program requires input. Click RUN to start."
+            : "Program output streams here line by line — stdout, diagnostics and the exit code."}
         </p>
       </div>
-      <div className="flex items-center gap-1.5 text-[11px] text-mist-600">
-        <span className="kbd">Ctrl</span>
-        <span>+</span>
-        <span className="kbd">Enter</span>
-        <span className="ml-1">to compile &amp; run</span>
-      </div>
-    </div>
-  );
-}
-
-function InputPanel({ stdin, onStdin, onRun }: { stdin: string; onStdin: (v: string) => void; onRun: () => void }) {
-  const [mode, setMode] = useState<"batch" | "step">("batch");
-  const [stepValues, setStepValues] = useState<string[]>(["", "", ""]);
-  const [currentStep, setCurrentStep] = useState(0);
-
-  const handleStepSubmit = (index: number) => {
-    if (index < stepValues.length - 1) {
-      setCurrentStep(index + 1);
-    }
-  };
-
-  const handleStepChange = (index: number, value: string) => {
-    const newValues = [...stepValues];
-    newValues[index] = value;
-    setStepValues(newValues);
-  };
-
-  const handleRunWithSteps = () => {
-    // Combine all step values into stdin
-    const combinedInput = stepValues.filter(v => v.trim() !== "").join("\n");
-    onStdin(combinedInput);
-    onRun();
-  };
-
-  return (
-    <div className="pop-in flex flex-col gap-3">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="font-display text-sm font-semibold text-mist-200">Standard Input</p>
-          <p className="mt-1 text-[11.5px] leading-relaxed text-mist-600">
-            This data is fed to your program when you press <span className="font-mono text-mist-500">Run</span>.
-          </p>
-        </div>
+      {needsInput && !hasRun && (
         <button
-          onClick={mode === "batch" ? onRun : handleRunWithSteps}
-          className="flex h-8 items-center gap-1.5 rounded-lg bg-ember-500 px-3 font-display text-[11px] font-bold tracking-wider text-ink-950 transition-all hover:bg-ember-400 active:scale-95"
+          onClick={() => onRun("")}
+          className="mt-2 flex h-9 items-center gap-2 rounded-lg bg-ember-500 px-4 font-display text-[13px] font-bold tracking-widest text-ink-950 transition-all hover:bg-ember-400 active:scale-95"
         >
-          <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
+          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
             <path d="M7 5.2v13.6c0 .9 1 1.5 1.8 1L19.6 13a1.2 1.2 0 0 0 0-2L8.8 4.2c-.8-.5-1.8.1-1.8 1Z" />
           </svg>
           RUN
         </button>
-      </div>
-
-      {/* Mode Toggle */}
-      <div className="flex gap-1 rounded-lg border border-ink-700/60 bg-ink-900/60 p-1">
-        <button
-          onClick={() => setMode("batch")}
-          className={`flex-1 rounded-md px-3 py-1.5 font-display text-[11px] font-semibold tracking-wide transition-all ${
-            mode === "batch"
-              ? "bg-ember-500/20 text-ember-400"
-              : "text-mist-500 hover:text-mist-300"
-          }`}
-        >
-          Batch Input
-        </button>
-        <button
-          onClick={() => setMode("step")}
-          className={`flex-1 rounded-md px-3 py-1.5 font-display text-[11px] font-semibold tracking-wide transition-all ${
-            mode === "step"
-              ? "bg-ember-500/20 text-ember-400"
-              : "text-mist-500 hover:text-mist-300"
-          }`}
-        >
-          Step-by-Step
-        </button>
-      </div>
-
-      {/* Batch Mode */}
-      {mode === "batch" && (
-        <>
-          <textarea
-            value={stdin}
-            onChange={(e) => onStdin(e.target.value)}
-            placeholder={"18\nMuhammad Salman Shar"}
-            spellCheck={false}
-            className="h-40 w-full resize-none rounded-lg border border-ink-700/70 bg-ink-950/70 px-3 py-2 font-mono text-[12px] leading-[19px] text-mist-200 placeholder:text-mist-600/70 transition-colors focus:border-ember-500/60 focus:outline-none focus:ring-2 focus:ring-ember-500/15"
-          />
-          <div className="flex items-center gap-2 text-[10.5px] text-mist-600">
-            <span className="font-mono text-mist-500">Tip:</span>
-            <span>
-              <span className="font-mono">cin &gt;&gt;</span> reads whitespace-separated tokens,{" "}
-              <span className="font-mono">getline</span> reads full lines
-            </span>
-          </div>
-        </>
       )}
-
-      {/* Step-by-Step Mode */}
-      {mode === "step" && (
-        <div className="flex flex-col gap-3">
-          {stepValues.map((value, index) => {
-            const isActive = index === currentStep;
-            const isCompleted = index < currentStep && value.trim() !== "";
-            const isDisabled = index > currentStep;
-
-            return (
-              <div
-                key={index}
-                className={`rounded-lg border p-3 transition-all ${
-                  isActive
-                    ? "border-ember-500/60 bg-ember-500/5"
-                    : isCompleted
-                      ? "border-pulse-500/40 bg-pulse-500/5"
-                      : "border-ink-700/60 bg-ink-900/40"
-                }`}
-              >
-                <div className="mb-2 flex items-center justify-between">
-                  <span className={`font-display text-[11px] font-semibold tracking-wide ${
-                    isActive ? "text-ember-400" : isCompleted ? "text-pulse-400" : "text-mist-500"
-                  }`}>
-                    Input {index + 1}
-                  </span>
-                  {isCompleted && (
-                    <span className="flex items-center gap-1 text-[10px] text-pulse-400">
-                      <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                        <path d="m5 12.5 4.5 4.5L19 7.5" />
-                      </svg>
-                      Done
-                    </span>
-                  )}
-                </div>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={value}
-                    onChange={(e) => handleStepChange(index, e.target.value)}
-                    disabled={isDisabled}
-                    placeholder={`Enter value ${index + 1}...`}
-                    className="flex-1 rounded-md border border-ink-700/70 bg-ink-950/70 px-2.5 py-1.5 font-mono text-[12px] text-mist-200 placeholder:text-mist-600/70 transition-colors focus:border-ember-500/60 focus:outline-none disabled:opacity-50"
-                  />
-                  {isActive && value.trim() !== "" && (
-                    <button
-                      onClick={() => handleStepSubmit(index)}
-                      className="rounded-md bg-ember-500 px-3 py-1.5 font-display text-[10px] font-bold tracking-wider text-ink-950 transition-all hover:bg-ember-400 active:scale-95"
-                    >
-                      {index < stepValues.length - 1 ? "NEXT" : "RUN"}
-                    </button>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-          <div className="flex items-center gap-2 text-[10.5px] text-mist-600">
-            <span className="font-mono text-mist-500">Tip:</span>
-            <span>Fill each input in order, then press RUN to execute</span>
-          </div>
+      {!needsInput && (
+        <div className="flex items-center gap-1.5 text-[11px] text-mist-600">
+          <span className="kbd">Ctrl</span>
+          <span>+</span>
+          <span className="kbd">Enter</span>
+          <span className="ml-1">to compile &amp; run</span>
         </div>
       )}
     </div>
   );
 }
+
+
