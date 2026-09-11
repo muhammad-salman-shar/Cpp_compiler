@@ -45,7 +45,7 @@ export default function App() {
   const [activeExample, setActiveExample] = useState<string | null>(initial.exampleId);
   const [entries, setEntries] = useState<Entry[]>([]);
   const [problems, setProblems] = useState<Problem[]>([]);
-  const [tab, setTab] = useState<"output" | "problems">("output");
+  const [tab, setTab] = useState<"output" | "problems" | "input">("output");
   const [running, setRunning] = useState(false);
   const [stage, setStage] = useState<Stage>("idle");
   const [caret, setCaret] = useState({ ln: 1, col: 1 });
@@ -56,6 +56,9 @@ export default function App() {
   const [toast, setToast] = useState<Toast | null>(null);
   const [navOpen, setNavOpen] = useState(false);
   const [hasRun, setHasRun] = useState(false);
+  
+  // Detect if code uses cin or getline
+  const needsInput = /(\bcin\b|\bgetline\s*\()/.test(code);
 
   const editorRef = useRef<EditorHandle>(null);
   const runningRef = useRef(false);
@@ -110,15 +113,10 @@ export default function App() {
     setTab("output");
     setErrorLine(null);
     setProblems([]);
-    setEntries([mk("sys", `g++ main.cpp -std=${stdRef.current.toLowerCase()} -o main   [C++ Compiler Lite · subset]`)]);
+    setEntries([]);
     setStage("lex");
 
     const fail = (msg: string, p: Problem) => {
-      setEntries((prev) => [
-        ...prev,
-        mk("err", msg, { line: p.line, col: p.col, lineText: p.lineText, hint: p.hint }),
-        mk("sys", "compilation terminated."),
-      ]);
       setProblems([p]);
       setErrorLine(p.line);
       setStage("error");
@@ -156,24 +154,13 @@ export default function App() {
         const diags = collectDiagnostics(ast, lines);
         setProblems(diags);
         const errors = diags.filter((d) => d.severity === "error");
-        const warns = diags.filter((d) => d.severity === "warning");
 
-        if (warns.length > 0) {
-          setEntries((prev) => [
-            ...prev,
-            ...warns.map((w) => mk("warn", w.message, { line: w.line, col: w.col, lineText: w.lineText, hint: w.hint })),
-          ]);
-        }
         if (errors.length > 0) {
           const e0 = errors[0];
           fail(e0.message, e0);
           return;
         }
 
-        setEntries((prev) => [
-          ...prev,
-          mk("sys", `lexed ${tokens.length - 1} tokens (${directives} directive${directives === 1 ? "" : "s"} skipped) · parsed OK · executing…`),
-        ]);
         setStage("exec");
 
         window.setTimeout(() => {
@@ -186,11 +173,10 @@ export default function App() {
             setEntries((prev) => [
               ...prev,
               ...out.map((l) => mk("out", l)),
-              mk("ok", `Process exited with code ${res.exitCode}  ·  ${ms < 1 ? ms.toFixed(2) : ms.toFixed(0)} ms  ·  ${(res.ops / 1000).toFixed(1)}k ops`),
             ]);
             setStats({ tokens: tokens.length - 1, timeMs: ms, exitCode: res.exitCode, ops: res.ops });
             setStage("done");
-            showToast(warns.length ? `Ran with ${warns.length} warning${warns.length === 1 ? "" : "s"}` : `Compiled & ran in ${ms < 1 ? ms.toFixed(1) : Math.round(ms)} ms`, "ok");
+            showToast(`Executed in ${ms < 1 ? ms.toFixed(1) : Math.round(ms)} ms`, "ok");
           } catch (e) {
             const ms = performance.now() - t0;
             const partial = out.map((l) => mk("out", l));
@@ -199,13 +185,11 @@ export default function App() {
               setEntries((prev) => [
                 ...prev,
                 ...partial,
-                mk("err", e.message, { line, col: undefined, lineText: lines[line - 1], hint: "runtime error — program aborted" }),
-                mk("sys", `process exited abnormally after ${ms.toFixed(0)} ms`),
               ]);
-              setProblems((prev) => [...prev, { severity: "error", message: `runtime: ${e.message}`, line, col: 1, lineText: lines[line - 1] }]);
+              setProblems((prev) => [...prev, { severity: "error", message: e.message, line, col: 1, lineText: lines[line - 1] }]);
               setErrorLine(line);
             } else {
-              setEntries((prev) => [...prev, ...partial, mk("err", `internal compiler error: ${(e as Error).message}`)]);
+              setEntries((prev) => [...prev, ...partial]);
             }
             setStage("error");
             showToast("Runtime error", "err");
@@ -352,7 +336,7 @@ export default function App() {
 
         {/* desktop sidebar */}
         <aside className="relative z-10 hidden w-[280px] shrink-0 border-r border-ink-700/60 bg-ink-850/95 lg:block">
-          <Sidebar examples={EXAMPLES} activeId={activeExample} onSelect={selectExample} stdin={stdin} onStdin={setStdin} />
+          <Sidebar examples={EXAMPLES} activeId={activeExample} onSelect={selectExample} />
         </aside>
 
         {/* mobile drawer */}
@@ -367,7 +351,7 @@ export default function App() {
                 </button>
               </div>
               <div className="min-h-0 flex-1">
-                <Sidebar examples={EXAMPLES} activeId={activeExample} onSelect={selectExample} stdin={stdin} onStdin={setStdin} />
+                <Sidebar examples={EXAMPLES} activeId={activeExample} onSelect={selectExample} />
               </div>
             </aside>
           </div>
@@ -413,6 +397,10 @@ export default function App() {
               onJump={jumpTo}
               running={running}
               hasRun={hasRun}
+              needsInput={needsInput}
+              stdin={stdin}
+              onStdin={setStdin}
+              timeMs={stats?.timeMs ?? null}
             />
           </section>
         </main>

@@ -328,14 +328,33 @@ class Parser {
   private parseVarDecl(topLevel: boolean): VarDecl {
     const start = this.peek();
     const isConst = this.match("kw", "const");
-    const type = this.parseType(true);
+    const baseType = this.parseType(true);
     const decls: { name: string; init?: Expr; line: number }[] = [];
+    let finalType = baseType;
+    
     do {
       const dline = this.peek().line;
       const name = this.expect("ident", undefined, "a variable name").v;
+      
+      // Check for array syntax: name[size]
+      let type = baseType;
+      if (this.check("pun", "[")) {
+        this.next(); // consume [
+        const sizeExpr = this.parseExpression();
+        this.expect("pun", "]", "]", "array size must be a constant integer");
+        
+        // Evaluate size - must be a constant
+        if (sizeExpr.node !== "num" || !Number.isInteger(sizeExpr.value) || sizeExpr.value <= 0) {
+          throw this.errAt(this.peek(), "array size must be a positive integer constant", 
+            "C-style arrays require a compile-time constant size, e.g. int arr[5]");
+        }
+        type = { kind: "array", elem: baseType, size: sizeExpr.value };
+        finalType = type; // Store for the VarDecl
+      }
+      
       let init: Expr | undefined;
       if (this.match("pun", "=")) {
-        if (type.kind === "vector" && this.check("pun", "{")) {
+        if ((type.kind === "vector" || type.kind === "array") && this.check("pun", "{")) {
           const lb = this.next();
           const items: Expr[] = [];
           if (!this.check("pun", "}")) {
@@ -363,7 +382,7 @@ class Parser {
     } while (this.match("pun", ","));
     this.expect("pun", ";", ";", "declarations end with a semicolon");
     void topLevel;
-    return { node: "vardecl", type, isConst, decls, line: start.line };
+    return { node: "vardecl", type: finalType, isConst, decls, line: start.line };
   }
 
   /** vector<T> v(n) / v(n, x)  →  desugared loop-free equivalent via vecinit is not possible

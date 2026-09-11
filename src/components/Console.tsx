@@ -15,15 +15,19 @@ export interface Entry {
 interface ConsoleProps {
   entries: Entry[];
   problems: Problem[];
-  tab: "output" | "problems";
-  onTab: (t: "output" | "problems") => void;
+  tab: "output" | "problems" | "input";
+  onTab: (t: "output" | "problems" | "input") => void;
   onClear: () => void;
   onJump: (line: number, col?: number) => void;
   running: boolean;
   hasRun: boolean;
+  needsInput: boolean;
+  stdin: string;
+  onStdin: (v: string) => void;
+  timeMs: number | null;
 }
 
-export function ConsolePanel({ entries, problems, tab, onTab, onClear, onJump, running, hasRun }: ConsoleProps) {
+export function ConsolePanel({ entries, problems, tab, onTab, onClear, onJump, running, hasRun, needsInput, stdin, onStdin, timeMs }: ConsoleProps) {
   const bodyRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -46,8 +50,22 @@ export function ConsolePanel({ entries, problems, tab, onTab, onClear, onJump, r
           count={problems.length}
           tone={errCount > 0 ? "error" : warnCount > 0 ? "warn" : "ok"}
         />
-        <div className="ml-auto flex items-center gap-1 pb-1">
-          {running && <span className="mr-1 font-mono text-[10px] tracking-wider text-ember-400/90">RUNNING</span>}
+        {needsInput && (
+          <TabBtn
+            active={tab === "input"}
+            onClick={() => onTab("input")}
+            label="Input"
+            count={0}
+            tone="neutral"
+          />
+        )}
+        <div className="ml-auto flex items-center gap-2 pb-1">
+          {tab === "output" && timeMs !== null && !running && (
+            <span className="font-mono text-[10px] text-mist-600">
+              ● completed · {timeMs < 1 ? timeMs.toFixed(1) : Math.round(timeMs)} ms
+            </span>
+          )}
+          {running && <span className="font-mono text-[10px] tracking-wider text-ember-400/90">RUNNING</span>}
           <button
             onClick={onClear}
             title="Clear console"
@@ -75,8 +93,10 @@ export function ConsolePanel({ entries, problems, tab, onTab, onClear, onJump, r
               )}
             </>
           )
-        ) : (
+        ) : tab === "problems" ? (
           <ProblemsList problems={problems} onJump={onJump} hasRun={hasRun} />
+        ) : (
+          <InputPanel stdin={stdin} onStdin={onStdin} />
         )}
       </div>
     </div>
@@ -248,6 +268,32 @@ function EmptyState({ hasRun }: { hasRun: boolean }) {
         <span>+</span>
         <span className="kbd">Enter</span>
         <span className="ml-1">to compile &amp; run</span>
+      </div>
+    </div>
+  );
+}
+
+function InputPanel({ stdin, onStdin }: { stdin: string; onStdin: (v: string) => void }) {
+  return (
+    <div className="pop-in flex flex-col gap-3">
+      <div>
+        <p className="font-display text-sm font-semibold text-mist-200">Standard Input</p>
+        <p className="mt-1 text-[11.5px] leading-relaxed text-mist-600">
+          This data is fed to your program when you press <span className="font-mono text-mist-500">Run</span>.
+          <span className="font-mono text-mist-500"> cin &gt;&gt;</span> reads whitespace-separated tokens,
+          <span className="font-mono text-mist-500"> getline</span> reads full lines.
+        </p>
+      </div>
+      <textarea
+        value={stdin}
+        onChange={(e) => onStdin(e.target.value)}
+        placeholder={"17 5\nAda Lovelace"}
+        spellCheck={false}
+        className="h-40 w-full resize-none rounded-lg border border-ink-700/70 bg-ink-950/70 px-3 py-2 font-mono text-[12px] leading-[19px] text-mist-200 placeholder:text-mist-600/70 transition-colors focus:border-ember-500/60 focus:outline-none focus:ring-2 focus:ring-ember-500/15"
+      />
+      <div className="flex items-center gap-2 text-[10.5px] text-mist-600">
+        <span className="font-mono text-mist-500">Tip:</span>
+        <span>Each line becomes a separate input for cin or getline</span>
       </div>
     </div>
   );
