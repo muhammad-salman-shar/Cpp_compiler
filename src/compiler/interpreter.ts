@@ -25,6 +25,12 @@ class Scope {
 class BreakSig {}
 class ContinueSig {}
 class ReturnSig { constructor(public value: Val | null) {} }
+export class InputPromptSignal extends Error {
+  constructor(public outputSoFar: string) {
+    super("Input required");
+    this.name = "InputPromptSignal";
+  }
+}
 
 const OP_LIMIT = 8_000_000;
 const DEPTH_LIMIT = 256;
@@ -223,7 +229,14 @@ function execStmt(s: Stmt, scope: Scope, ctx: Ctx): void {
       for (const t of s.targets) {
         const cell = resolveLValue(t, scope, ctx);
         const tok = ctx.stdin.nextToken();
-        if (tok === null) throw new RuntimeError("cin: no more input — add data in the STDIN panel and run again", s.line);
+        if (tok === null) {
+          // Flush buffer before signaling
+          if (ctx.buffer.length > 0) {
+            ctx.out(ctx.buffer);
+            ctx.buffer = "";
+          }
+          throw new InputPromptSignal("");
+        }
         cell.value = parseToken(tok, cell.type, s.line);
       }
       break;
@@ -232,7 +245,16 @@ function execStmt(s: Stmt, scope: Scope, ctx: Ctx): void {
       const cell = scope.lookup(s.target);
       if (!cell) throw new RuntimeError(`undeclared variable '${s.target}'`, s.line);
       if (cell.type.kind !== "string") throw new RuntimeError(`getline needs a std::string variable, got ${typeLabel(cell.type)}`, s.line);
-      cell.value = ctx.stdin.nextLine() ?? "";
+      const line = ctx.stdin.nextLine();
+      if (line === null) {
+        // Flush buffer before signaling
+        if (ctx.buffer.length > 0) {
+          ctx.out(ctx.buffer);
+          ctx.buffer = "";
+        }
+        throw new InputPromptSignal("");
+      }
+      cell.value = line;
       break;
     }
     default: break;

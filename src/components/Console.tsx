@@ -23,61 +23,35 @@ interface ConsoleProps {
   hasRun: boolean;
   needsInput: boolean;
   timeMs: number | null;
-  onRun: (stdin: string) => void;
+  onRun: (stdin?: string) => void;
+  isWaitingForInput?: boolean;
+  onInputSubmit?: (input: string) => void;
 }
 
-export function ConsolePanel({ entries, problems, tab, onTab, onClear, onJump, running, hasRun, needsInput, timeMs, onRun }: ConsoleProps) {
+export function ConsolePanel({ entries, problems, tab, onTab, onClear, onJump, running, hasRun, needsInput, timeMs, onRun, isWaitingForInput, onInputSubmit }: ConsoleProps) {
   const bodyRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const [inputMode, setInputMode] = useState<"idle" | "collecting" | "executing">("idle");
-  const [collectedInputs, setCollectedInputs] = useState<string[]>([]);
   const [currentInput, setCurrentInput] = useState("");
-  const [inputStep, setInputStep] = useState(0);
 
   useEffect(() => {
     const el = bodyRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [entries.length, tab, problems.length, collectedInputs.length]);
+  }, [entries.length, tab, problems.length, isWaitingForInput]);
 
-  // Reset input state when code changes
+  // Focus input when waiting for input
   useEffect(() => {
-    setInputMode("idle");
-    setCollectedInputs([]);
-    setCurrentInput("");
-    setInputStep(0);
-  }, [needsInput]);
+    if (isWaitingForInput && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [isWaitingForInput]);
 
   const errCount = problems.filter((p) => p.severity === "error").length;
   const warnCount = problems.length - errCount;
 
-  const handleStartInput = () => {
-    setInputMode("collecting");
-    setCollectedInputs([]);
-    setCurrentInput("");
-    setInputStep(0);
-    setTimeout(() => inputRef.current?.focus(), 100);
-  };
-
   const handleSubmitInput = () => {
-    if (!currentInput.trim()) return;
-    
-    const newInputs = [...collectedInputs, currentInput];
-    setCollectedInputs(newInputs);
+    if (!currentInput.trim() || !onInputSubmit) return;
+    onInputSubmit(currentInput);
     setCurrentInput("");
-    
-    // For now, we'll execute after first input (simplified)
-    // In a real implementation, you'd need to analyze the code to know how many inputs are needed
-    // For this demo, we'll just collect one input and run
-    setInputMode("executing");
-    const stdin = newInputs.join("\n");
-    onRun(stdin);
-    
-    // Reset after execution
-    setTimeout(() => {
-      setInputMode("idle");
-      setCollectedInputs([]);
-      setInputStep(0);
-    }, 100);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -119,19 +93,14 @@ export function ConsolePanel({ entries, problems, tab, onTab, onClear, onJump, r
       {/* body */}
       <div ref={bodyRef} className="min-h-0 flex-1 overflow-y-auto px-3 py-3 font-mono text-[12.5px] leading-[20px]">
         {tab === "output" ? (
-          entries.length === 0 && inputMode === "idle" ? (
-            <EmptyState hasRun={hasRun} needsInput={needsInput} onStartInput={handleStartInput} />
+          entries.length === 0 && !isWaitingForInput ? (
+            <EmptyState hasRun={hasRun} needsInput={needsInput} onRun={onRun} />
           ) : (
             <>
               {entries.map((e, i) => (
                 <EntryRow key={e.id} e={e} index={i} onJump={onJump} />
               ))}
-              {inputMode === "collecting" && collectedInputs.map((input, i) => (
-                <div key={i} className="text-pulse-400">
-                  <span className="text-mist-600">&gt; </span>{input}
-                </div>
-              ))}
-              {!running && inputMode !== "collecting" && (
+              {!running && !isWaitingForInput && (
                 <div className="mt-1 flex items-center gap-2 pl-0.5">
                   <span className="caret-blink inline-block h-[15px] w-[8px] bg-pulse-400/90" />
                 </div>
@@ -143,8 +112,8 @@ export function ConsolePanel({ entries, problems, tab, onTab, onClear, onJump, r
         )}
       </div>
 
-      {/* inline input bar */}
-      {needsInput && inputMode === "collecting" && (
+      {/* inline input bar - shown when waiting for input */}
+      {isWaitingForInput && (
         <div className="border-t border-ink-700/60 bg-ink-900/80 p-2">
           <div className="flex items-center gap-2">
             <span className="font-mono text-[12px] text-pulse-400">&gt;</span>
@@ -162,8 +131,11 @@ export function ConsolePanel({ entries, problems, tab, onTab, onClear, onJump, r
               onClick={handleSubmitInput}
               disabled={running || !currentInput.trim()}
               className="flex h-8 items-center gap-1.5 rounded-lg bg-ember-500 px-3 font-display text-[11px] font-bold tracking-wider text-ink-950 transition-all hover:bg-ember-400 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
+              title="Submit (Enter)"
             >
-              {collectedInputs.length === 0 ? "RUN" : "NEXT"}
+              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M5 12h14M12 5l7 7-7 7" />
+              </svg>
             </button>
           </div>
         </div>
@@ -317,7 +289,7 @@ function ProblemsList({ problems, onJump, hasRun }: { problems: Problem[]; onJum
   );
 }
 
-function EmptyState({ hasRun, needsInput, onStartInput }: { hasRun: boolean; needsInput: boolean; onStartInput: () => void }) {
+function EmptyState({ hasRun, needsInput, onRun }: { hasRun: boolean; needsInput: boolean; onRun: (stdin?: string) => void }) {
   return (
     <div className="pop-in flex h-full flex-col items-center justify-center gap-3 pb-8 text-center">
       <span className="relative grid h-16 w-16 place-items-center rounded-2xl border border-ink-600 bg-ink-800/80 text-mist-500 shadow-[0_10px_30px_-12px_rgba(0,0,0,0.8)]">
@@ -330,19 +302,19 @@ function EmptyState({ hasRun, needsInput, onStartInput }: { hasRun: boolean; nee
         </p>
         <p className="mx-auto mt-1 max-w-[250px] text-[11.5px] leading-relaxed text-mist-600">
           {needsInput 
-            ? "This program requires input. Click below to start entering values."
+            ? "This program requires input. Click RUN to start."
             : "Program output streams here line by line — stdout, diagnostics and the exit code."}
         </p>
       </div>
       {needsInput && !hasRun && (
         <button
-          onClick={onStartInput}
+          onClick={() => onRun("")}
           className="mt-2 flex h-9 items-center gap-2 rounded-lg bg-ember-500 px-4 font-display text-[13px] font-bold tracking-widest text-ink-950 transition-all hover:bg-ember-400 active:scale-95"
         >
           <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
             <path d="M7 5.2v13.6c0 .9 1 1.5 1.8 1L19.6 13a1.2 1.2 0 0 0 0-2L8.8 4.2c-.8-.5-1.8.1-1.8 1Z" />
           </svg>
-          START INPUT
+          RUN
         </button>
       )}
       {!needsInput && (

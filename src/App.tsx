@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { lex } from "./compiler/lexer";
 import { parse } from "./compiler/parser";
 import { collectDiagnostics } from "./compiler/diagnostics";
-import { runProgram } from "./compiler/interpreter";
+import { runProgram, InputPromptSignal } from "./compiler/interpreter";
 import { CompileError, RuntimeError } from "./compiler/types";
 import type { Problem } from "./compiler/types";
 import { EXAMPLES } from "./lib/examples";
@@ -15,7 +15,7 @@ import { Sidebar } from "./components/Sidebar";
 import { SettingsPanel, loadSettings, saveSettings } from "./components/SettingsPanel";
 import type { Settings } from "./components/SettingsPanel";
 import { ProPopup } from "./components/ProPopup";
-import { LogoMark, IconPlay, IconSpinner, IconCheck, IconError, IconChevron, IconClose, IconPanel, IconCode } from "./components/icons";
+import { LogoMark, IconPlay, IconSpinner, IconCheck, IconError, IconChevron, IconClose, IconPanel, IconCode, IconEraser } from "./components/icons";
 
 type Stage = "idle" | "lex" | "parse" | "exec" | "done" | "error";
 
@@ -62,6 +62,8 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [proOpen, setProOpen] = useState(false);
   const [settings, setSettings] = useState<Settings>(loadSettings());
+  const [accumulatedInputs, setAccumulatedInputs] = useState<string[]>([]);
+  const [isWaitingForInput, setIsWaitingForInput] = useState(false);
   
   // Apply theme to document
   useEffect(() => {
@@ -152,6 +154,12 @@ export default function App() {
     const lines = src.split("\n");
     const stdinToUse = stdinOverride !== undefined ? stdinOverride : stdinRef.current;
 
+    // If starting a fresh run (not from input submission), clear accumulated inputs
+    if (stdinOverride === undefined) {
+      setAccumulatedInputs([]);
+      setIsWaitingForInput(false);
+    }
+
     runningRef.current = true;
     setRunning(true);
     setHasRun(true);
@@ -221,10 +229,26 @@ export default function App() {
             ]);
             setStats({ tokens: tokens.length - 1, timeMs: ms, exitCode: res.exitCode, ops: res.ops });
             setStage("done");
+            setIsWaitingForInput(false);
             showToast(`Executed in ${ms < 1 ? ms.toFixed(1) : Math.round(ms)} ms`, "ok");
           } catch (e) {
             const ms = performance.now() - t0;
             const partial = out.map((l) => mk("out", l));
+            
+            // Check if it's an InputPromptSignal
+            if (e instanceof InputPromptSignal) {
+              // Add the output so far to entries
+              setEntries((prev) => [
+                ...prev,
+                ...partial,
+              ]);
+              setIsWaitingForInput(true);
+              setStage("done");
+              runningRef.current = false;
+              setRunning(false);
+              return;
+            }
+            
             if (e instanceof RuntimeError) {
               const line = e.line ?? 1;
               setEntries((prev) => [
@@ -248,6 +272,21 @@ export default function App() {
 
   const runRef = useRef(run);
   runRef.current = run;
+
+  const handleInputSubmit = useCallback((input: string) => {
+    // Add the input to accumulated inputs
+    const newInputs = [...accumulatedInputs, input];
+    setAccumulatedInputs(newInputs);
+    
+    // Add the user's input to the output display
+    setEntries((prev) => [
+      ...prev,
+      mk("out", input),
+    ]);
+    
+    // Re-run the program with accumulated inputs
+    run(newInputs.join("\n") + "\n");
+  }, [accumulatedInputs, run, mk]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -426,6 +465,16 @@ export default function App() {
                 </span>
                 <span>{code.length} chars</span>
                 <span className="hidden text-pulse-500/80 sm:inline">UTF-8</span>
+                <button
+                  onClick={() => {
+                    setCode("");
+                    editorRef.current?.focus();
+                  }}
+                  title="Clear editor"
+                  className="rounded-md p-1 text-mist-600 transition-colors hover:bg-ink-700/50 hover:text-mist-300 active:scale-90"
+                >
+                  <IconEraser className="h-3.5 w-3.5" />
+                </button>
               </div>
             </div>
             <div className="min-h-0 flex-1">
@@ -450,13 +499,19 @@ export default function App() {
               problems={problems}
               tab={tab}
               onTab={setTab}
-              onClear={() => setEntries([])}
+              onClear={() => {
+                setEntries([]);
+                setAccumulatedInputs([]);
+                setIsWaitingForInput(false);
+              }}
               onJump={jumpTo}
               running={running}
               hasRun={hasRun}
               needsInput={needsInput}
               timeMs={stats?.timeMs ?? null}
               onRun={run}
+              isWaitingForInput={isWaitingForInput}
+              onInputSubmit={handleInputSubmit}
             />
           </section>
         </main>
