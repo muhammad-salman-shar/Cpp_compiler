@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>getline() Bug Fix - Manual Test</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 900px;
+            margin: 40px auto;
+            padding: 20px;
+            background: #0b1220;
+            color: #c6d4e8;
+        }
+        h1 {
+            color: #ffbe62;
+            border-bottom: 2px solid #263a5c;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #45d4be;
+            margin-top: 30px;
+        }
+        .code-block {
+            background: #121c2e;
+            border: 1px solid #263a5c;
+            border-radius: 8px;
+            padding: 15px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            overflow-x: auto;
+            margin: 15px 0;
+        }
+        .success {
+            color: #45d4be;
+            font-weight: bold;
+        }
+        .error {
+            color: #ff7d6e;
+            font-weight: bold;
+        }
+        .warning {
+            color: #ffbe62;
+            font-weight: bold;
+        }
+        .step {
+            background: #16223a;
+            border-left: 4px solid #45d4be;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+        }
+        .step-number {
+            color: #ffbe62;
+            font-weight: bold;
+            font-size: 18px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th, td {
+            border: 1px solid #263a5c;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background: #16223a;
+            color: #ffbe62;
+        }
+        .fix-highlight {
+            background: #1b2a44;
+            border: 2px solid #45d4be;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>🐛 getline() Bug Fix - Verification Guide</h1>
+    
+    <h2>Problem Summary</h2>
+    <p>When running code with multiple inputs using <code>cin >> </code> followed by <code>getline()</code>, the program would skip the second input prompt and assign an empty string to the variable.</p>
+    
+    <h2>Test Code</h2>
+    <div class="code-block">
+<pre>#include &lt;iostream&gt;
+#include &lt;string&gt;
+using namespace std;
+
+int main() {
+    int age;
+    string name;
+    
+    cout &lt;&lt; "Enter age: ";
+    cin &gt;&gt; age;
+    
+    cin.ignore();
+    
+    cout &lt;&lt; "Enter full name: ";
+    getline(cin, name);
+    
+    cout &lt;&lt; "Name: " &lt;&lt; name &lt;&lt; endl;
+    cout &lt;&lt; "Age: " &lt;&lt; age &lt;&lt; endl;
+    
+    if (age &gt;= 18) {
+        cout &lt;&lt; "Status: Adult" &lt;&lt; endl;
+    } else {
+        cout &lt;&lt; "Status: Minor" &lt;&lt; endl;
+    }
+    
+    return 0;
+}</pre>
+    </div>
+
+    <h2>Manual Testing Steps</h2>
+    
+    <div class="step">
+        <span class="step-number">Step 1:</span>
+        <p>Open the C++ Compiler Lite application in your browser</p>
+    </div>
+    
+    <div class="step">
+        <span class="step-number">Step 2:</span>
+        <p>Copy and paste the test code above into the editor</p>
+    </div>
+    
+    <div class="step">
+        <span class="step-number">Step 3:</span>
+        <p>Click the <strong>RUN</strong> button</p>
+        <p><span class="warning">Expected:</span> First prompt appears: <code>Enter age: </code></p>
+    </div>
+    
+    <div class="step">
+        <span class="step-number">Step 4:</span>
+        <p>Type <code>18</code> in the input field and click the <strong>↵ Enter</strong> button</p>
+        <p><span class="warning">Expected:</span> Second prompt appears: <code>Enter full name: </code></p>
+        <p><span class="error">❌ BUG (before fix):</span> No second prompt, program continues with empty name</p>
+    </div>
+    
+    <div class="step">
+        <span class="step-number">Step 5:</span>
+        <p>Type <code>Muhammad Salman Shar</code> and click <strong>↵ Enter</strong></p>
+        <p><span class="warning">Expected output:</span></p>
+        <div class="code-block">
+<pre>Enter age: 18
+Enter full name: Muhammad Salman Shar
+Name: Muhammad Salman Shar
+Age: 18
+Status: Adult</pre>
+        </div>
+    </div>
+
+    <h2>Verification Checklist</h2>
+    <table>
+        <tr>
+            <th>Test Case</th>
+            <th>Expected Result</th>
+            <th>Status</th>
+        </tr>
+        <tr>
+            <td>First prompt appears</td>
+            <td>"Enter age: " is displayed</td>
+            <td>☐ Pass / ☐ Fail</td>
+        </tr>
+        <tr>
+            <td>Enter age (18)</td>
+            <td>Age is read correctly</td>
+            <td>☐ Pass / ☐ Fail</td>
+        </tr>
+        <tr>
+            <td>Second prompt appears</td>
+            <td>"Enter full name: " is displayed</td>
+            <td>☐ Pass / ☐ Fail</td>
+        </tr>
+        <tr>
+            <td>Enter name</td>
+            <td>Name is read correctly (not empty)</td>
+            <td>☐ Pass / ☐ Fail</td>
+        </tr>
+        <tr>
+            <td>Output shows name</td>
+            <td>"Name: Muhammad Salman Shar" (not blank)</td>
+            <td>☐ Pass / ☐ Fail</td>
+        </tr>
+        <tr>
+            <td>Output shows age</td>
+            <td>"Age: 18"</td>
+            <td>☐ Pass / ☐ Fail</td>
+        </tr>
+        <tr>
+            <td>Status is correct</td>
+            <td>"Status: Adult" (age >= 18)</td>
+            <td>☐ Pass / ☐ Fail</td>
+        </tr>
+    </table>
+
+    <h2>The Fix</h2>
+    <div class="fix-highlight">
+        <h3>Modified: <code>src/compiler/interpreter.ts</code></h3>
+        <p><strong>Method:</strong> <code>StdinReader.nextLine()</code></p>
+        <div class="code-block">
+<pre>nextLine(): string | null {
+  if (this.li >= this.lines.length) return null;
+  const rest = this.lines[this.li].slice(this.col);
+  this.li++; this.col = 0;
+  
+  <span style="color: #45d4be;">// NEW: If we read an empty line and we're now at EOF, treat it as EOF</span>
+  <span style="color: #45d4be;">// This handles the case where input like "18\n" splits into ["18", ""]</span>
+  <span style="color: #45d4be;">// and we need to prompt for more input instead of returning empty string</span>
+  <span style="color: #ffbe62;">if (rest === "" && this.li >= this.lines.length) {</span>
+  <span style="color: #ffbe62;">  return null;</span>
+  <span style="color: #ffbe62;">}</span>
+  
+  return rest;
+}</pre>
+        </div>
+    </div>
+
+    <h2>Why This Fix Works</h2>
+    <ol>
+        <li><strong>Before:</strong> When input "18\n" was split, it created <code>["18", ""]</code>. The trailing empty string was returned as valid input.</li>
+        <li><strong>After:</strong> When we read an empty string AND we're at EOF, we return <code>null</code> instead.</li>
+        <li><strong>Result:</strong> <code>getline()</code> receives <code>null</code>, throws <code>InputPromptSignal</code>, and the frontend prompts for more input.</li>
+    </ol>
+
+    <h2>Additional Test Cases</h2>
+    
+    <h3>Test Case 2: Multiple getline() calls</h3>
+    <div class="code-block">
+<pre>string firstName, lastName;
+cout &lt;&lt; "First name: ";
+getline(cin, firstName);
+cout &lt;&lt; "Last name: ";
+getline(cin, lastName);
+cout &lt;&lt; "Full: " &lt;&lt; firstName &lt;&lt; " " &lt;&lt; lastName;</pre>
+    </div>
+    <p><strong>Expected:</strong> Both prompts appear, both names are captured correctly.</p>
+
+    <h3>Test Case 3: Mixed cin >> and getline()</h3>
+    <div class="code-block">
+<pre>int x, y;
+string msg;
+cin &gt;&gt; x &gt;&gt; y;
+cin.ignore();
+getline(cin, msg);
+cout &lt;&lt; x &lt;&lt; " " &lt;&lt; y &lt;&lt; " " &lt;&lt; msg;</pre>
+    </div>
+    <p><strong>Expected:</strong> All three inputs are captured correctly.</p>
+
+    <h2>Build Status</h2>
+    <p><span class="success">✅ Build successful</span></p>
+    <p><span class="success">✅ No TypeScript errors</span></p>
+    <p><span class="success">✅ No breaking changes</span></p>
+
+    <hr style="margin: 40px 0; border-color: #263a5c;">
+    <p style="text-align: center; color: #7488a6; font-size: 14px;">
+        C++ Compiler Lite - getline() Bug Fix Verification<br>
+        Last updated: 2024
+    </p>
+</body>
+</html>

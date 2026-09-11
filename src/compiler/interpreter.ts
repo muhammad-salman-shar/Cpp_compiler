@@ -59,6 +59,14 @@ class StdinReader {
     if (this.li >= this.lines.length) return null;
     const rest = this.lines[this.li].slice(this.col);
     this.li++; this.col = 0;
+    
+    // If we read an empty line and we're now at EOF, treat it as EOF
+    // This handles the case where input like "18\n" splits into ["18", ""]
+    // and we need to prompt for more input instead of returning empty string
+    if (rest === "" && this.li >= this.lines.length) {
+      return null;
+    }
+    
     return rest;
   }
 
