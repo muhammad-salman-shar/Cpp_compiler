@@ -25,9 +25,10 @@ interface ConsoleProps {
   stdin: string;
   onStdin: (v: string) => void;
   timeMs: number | null;
+  onRun: () => void;
 }
 
-export function ConsolePanel({ entries, problems, tab, onTab, onClear, onJump, running, hasRun, needsInput, stdin, onStdin, timeMs }: ConsoleProps) {
+export function ConsolePanel({ entries, problems, tab, onTab, onClear, onJump, running, hasRun, needsInput, stdin, onStdin, timeMs, onRun }: ConsoleProps) {
   const bodyRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -96,7 +97,7 @@ export function ConsolePanel({ entries, problems, tab, onTab, onClear, onJump, r
         ) : tab === "problems" ? (
           <ProblemsList problems={problems} onJump={onJump} hasRun={hasRun} />
         ) : (
-          <InputPanel stdin={stdin} onStdin={onStdin} />
+          <InputPanel stdin={stdin} onStdin={onStdin} onRun={onRun} />
         )}
       </div>
     </div>
@@ -273,27 +274,39 @@ function EmptyState({ hasRun }: { hasRun: boolean }) {
   );
 }
 
-function InputPanel({ stdin, onStdin }: { stdin: string; onStdin: (v: string) => void }) {
+function InputPanel({ stdin, onStdin, onRun }: { stdin: string; onStdin: (v: string) => void; onRun: () => void }) {
   return (
     <div className="pop-in flex flex-col gap-3">
-      <div>
-        <p className="font-display text-sm font-semibold text-mist-200">Standard Input</p>
-        <p className="mt-1 text-[11.5px] leading-relaxed text-mist-600">
-          This data is fed to your program when you press <span className="font-mono text-mist-500">Run</span>.
-          <span className="font-mono text-mist-500"> cin &gt;&gt;</span> reads whitespace-separated tokens,
-          <span className="font-mono text-mist-500"> getline</span> reads full lines.
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="font-display text-sm font-semibold text-mist-200">Standard Input</p>
+          <p className="mt-1 text-[11.5px] leading-relaxed text-mist-600">
+            This data is fed to your program when you press <span className="font-mono text-mist-500">Run</span>.
+          </p>
+        </div>
+        <button
+          onClick={onRun}
+          className="flex h-8 items-center gap-1.5 rounded-lg bg-ember-500 px-3 font-display text-[11px] font-bold tracking-wider text-ink-950 transition-all hover:bg-ember-400 active:scale-95"
+        >
+          <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M7 5.2v13.6c0 .9 1 1.5 1.8 1L19.6 13a1.2 1.2 0 0 0 0-2L8.8 4.2c-.8-.5-1.8.1-1.8 1Z" />
+          </svg>
+          RUN
+        </button>
       </div>
       <textarea
         value={stdin}
         onChange={(e) => onStdin(e.target.value)}
-        placeholder={"17 5\nAda Lovelace"}
+        placeholder={"18\nMuhammad Salman Shar"}
         spellCheck={false}
         className="h-40 w-full resize-none rounded-lg border border-ink-700/70 bg-ink-950/70 px-3 py-2 font-mono text-[12px] leading-[19px] text-mist-200 placeholder:text-mist-600/70 transition-colors focus:border-ember-500/60 focus:outline-none focus:ring-2 focus:ring-ember-500/15"
       />
       <div className="flex items-center gap-2 text-[10.5px] text-mist-600">
         <span className="font-mono text-mist-500">Tip:</span>
-        <span>Each line becomes a separate input for cin or getline</span>
+        <span>
+          <span className="font-mono">cin &gt;&gt;</span> reads whitespace-separated tokens,{" "}
+          <span className="font-mono">getline</span> reads full lines
+        </span>
       </div>
     </div>
   );

@@ -4,9 +4,10 @@ interface SidebarProps {
   examples: Example[];
   activeId: string | null;
   onSelect: (ex: Example) => void;
+  onSettings?: () => void;
 }
 
-export function Sidebar({ examples, activeId, onSelect }: SidebarProps) {
+export function Sidebar({ examples, activeId, onSelect, onSettings }: SidebarProps) {
   return (
     <div className="flex h-full min-h-0 flex-col">
       {/* examples */}
@@ -49,6 +50,22 @@ export function Sidebar({ examples, activeId, onSelect }: SidebarProps) {
           })}
         </ul>
       </nav>
+      
+      {/* Settings button */}
+      {onSettings && (
+        <div className="border-t border-ink-700/60 p-3">
+          <button
+            onClick={onSettings}
+            className="flex w-full items-center justify-center gap-2 rounded-lg border border-ink-700/60 bg-ink-800/60 px-4 py-2.5 font-display text-[11px] font-semibold tracking-wider text-mist-400 transition-all hover:border-ink-600 hover:bg-ink-700/60 hover:text-mist-200 active:scale-[0.98]"
+          >
+            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+            </svg>
+            SETTINGS
+          </button>
+        </div>
+      )}
     </div>
   );
 }
