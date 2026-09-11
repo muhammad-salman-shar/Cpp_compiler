@@ -12,6 +12,9 @@ import type { EditorHandle } from "./components/Editor";
 import { ConsolePanel } from "./components/Console";
 import type { Entry } from "./components/Console";
 import { Sidebar } from "./components/Sidebar";
+import { SettingsPanel, loadSettings, saveSettings } from "./components/SettingsPanel";
+import type { Settings } from "./components/SettingsPanel";
+import { ProPopup } from "./components/ProPopup";
 import { LogoMark, IconPlay, IconSpinner, IconCheck, IconError, IconChevron, IconClose, IconPanel, IconCode } from "./components/icons";
 
 type Stage = "idle" | "lex" | "parse" | "exec" | "done" | "error";
@@ -56,9 +59,37 @@ export default function App() {
   const [toast, setToast] = useState<Toast | null>(null);
   const [navOpen, setNavOpen] = useState(false);
   const [hasRun, setHasRun] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [proOpen, setProOpen] = useState(false);
+  const [settings, setSettings] = useState<Settings>(loadSettings());
+  const [inputWarning, setInputWarning] = useState(false);
   
-  // Detect if code uses cin or getline
-  const needsInput = /(\bcin\b|\bgetline\s*\()/.test(code);
+  // Detect if code uses cin or getline (token-based detection)
+  const needsInput = (() => {
+    try {
+      const result = lex(code);
+      const tokens = result.tokens;
+      for (let i = 0; i < tokens.length; i++) {
+        const t = tokens[i];
+        if (t.kind === "kw" && t.v === "cin") {
+          // Check if it's cin >> or cin.method()
+          if (i + 1 < tokens.length) {
+            const next = tokens[i + 1];
+            if ((next.kind === "pun" && next.v === ">>") || (next.kind === "pun" && next.v === ".")) {
+              return true;
+            }
+          }
+        }
+        if (t.kind === "ident" && t.v === "getline") {
+          return true;
+        }
+      }
+      return false;
+    } catch {
+      // If lexing fails, fall back to simple regex
+      return /(\bcin\s*>>|\bcin\s*\.|\bgetline\s*\()/.test(code);
+    }
+  })();
 
   const editorRef = useRef<EditorHandle>(null);
   const runningRef = useRef(false);
@@ -104,6 +135,15 @@ export default function App() {
 
   const run = useCallback(() => {
     if (runningRef.current) return;
+    
+    // Check if input is required but not provided
+    if (needsInput && stdinRef.current.trim() === "") {
+      setInputWarning(true);
+      setTab("input");
+      setTimeout(() => setInputWarning(false), 3000);
+      return;
+    }
+    
     const src = codeRef.current;
     const lines = src.split("\n");
 
@@ -327,6 +367,14 @@ export default function App() {
               Ctrl⏎
             </span>
           </button>
+          
+          {/* FREE badge */}
+          <button
+            onClick={() => setProOpen(true)}
+            className="flex h-8 items-center gap-1 rounded-md border border-ember-500/40 bg-ember-500/10 px-2.5 font-display text-[10px] font-bold tracking-wider text-ember-400 transition-all hover:border-ember-500/60 hover:bg-ember-500/20 active:scale-95"
+          >
+            FREE
+          </button>
         </div>
       </header>
 
@@ -336,7 +384,7 @@ export default function App() {
 
         {/* desktop sidebar */}
         <aside className="relative z-10 hidden w-[280px] shrink-0 border-r border-ink-700/60 bg-ink-850/95 lg:block">
-          <Sidebar examples={EXAMPLES} activeId={activeExample} onSelect={selectExample} />
+          <Sidebar examples={EXAMPLES} activeId={activeExample} onSelect={selectExample} onSettings={() => setSettingsOpen(true)} />
         </aside>
 
         {/* mobile drawer */}
@@ -351,7 +399,7 @@ export default function App() {
                 </button>
               </div>
               <div className="min-h-0 flex-1">
-                <Sidebar examples={EXAMPLES} activeId={activeExample} onSelect={selectExample} />
+                <Sidebar examples={EXAMPLES} activeId={activeExample} onSelect={selectExample} onSettings={() => setSettingsOpen(true)} />
               </div>
             </aside>
           </div>
@@ -401,6 +449,7 @@ export default function App() {
               stdin={stdin}
               onStdin={setStdin}
               timeMs={stats?.timeMs ?? null}
+              onRun={run}
             />
           </section>
         </main>
@@ -443,6 +492,29 @@ export default function App() {
           {toast.msg}
         </div>
       )}
+      
+      {/* ================= input warning ================= */}
+      {inputWarning && (
+        <div className="toast-in fixed bottom-20 left-1/2 z-50 -translate-x-1/2 flex items-center gap-2 rounded-lg border border-ember-500/40 bg-ink-800 px-4 py-2.5 text-[13px] font-medium text-ember-300 shadow-[0_12px_36px_-8px_rgba(0,0,0,0.7)]">
+          <IconError className="h-4 w-4" />
+          Please enter input before running this program.
+        </div>
+      )}
+      
+      {/* ================= settings popup ================= */}
+      <SettingsPanel
+        isOpen={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        settings={settings}
+        onSave={(s) => {
+          setSettings(s);
+          saveSettings(s);
+          showToast("Settings saved", "ok");
+        }}
+      />
+      
+      {/* ================= pro popup ================= */}
+      <ProPopup isOpen={proOpen} onClose={() => setProOpen(false)} />
     </div>
   );
 }

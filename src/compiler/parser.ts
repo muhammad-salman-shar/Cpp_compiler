@@ -187,7 +187,16 @@ class Parser {
         case "break": this.next(); this.expect("pun", ";", ";"); return { node: "break", line: t.line };
         case "continue": this.next(); this.expect("pun", ";", ";"); return { node: "continue", line: t.line };
         case "cout": return this.parseCout();
-        case "cin": return this.parseCin();
+        case "cin": {
+          // Check if this is cin >> (input operation) or cin.method() (member call)
+          if (this.peek(1).kind === "pun" && this.peek(1).v === ".") {
+            // cin.ignore() or other member call - parse as expression statement
+            const expr = this.parseExpression();
+            this.expect("pun", ";", ";", "statements end with a semicolon");
+            return { node: "exprstmt", expr, line: t.line };
+          }
+          return this.parseCin();
+        }
       }
     }
 

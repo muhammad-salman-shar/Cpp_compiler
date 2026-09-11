@@ -55,6 +55,33 @@ class StdinReader {
     this.li++; this.col = 0;
     return rest;
   }
+
+  nextChar(): string | null {
+    if (this.li >= this.lines.length) return null;
+    const line = this.lines[this.li];
+    if (this.col >= line.length) {
+      // Return newline and move to next line
+      this.li++;
+      this.col = 0;
+      return "\n";
+    }
+    const ch = line[this.col];
+    this.col++;
+    return ch;
+  }
+
+  peek(): string | null {
+    if (this.li >= this.lines.length) return null;
+    const line = this.lines[this.li];
+    if (this.col >= line.length) {
+      return "\n";
+    }
+    return line[this.col];
+  }
+
+  eof(): boolean {
+    return this.li >= this.lines.length;
+  }
 }
 
 /* --------------------------------- context --------------------------------- */
@@ -684,9 +711,92 @@ function cloneValue(v: RuntimeValue): RuntimeValue {
   return v;
 }
 
+/* --------------------------------- cin methods --------------------------------- */
+
+function handleCinMethod(e: Expr & { node: "method" }, ctx: Ctx): Val {
+  switch (e.name) {
+    case "ignore": {
+      // cin.ignore() - skip one character from input
+      // cin.ignore(n) - skip n characters
+      // cin.ignore(n, delim) - skip until delim or n chars
+      const n = e.args.length > 0 ? Math.trunc(toNumber(evaluate(e.args[0], ctx.globals, ctx), e.line)) : 1;
+      const delim = e.args.length > 1 ? stringify(evaluate(e.args[1], ctx.globals, ctx), e.line)[0] : null;
+      
+      // Skip characters from stdin
+      for (let i = 0; i < n; i++) {
+        const ch = ctx.stdin.nextChar();
+        if (ch === null) break;
+        if (delim !== null && ch === delim) break;
+      }
+      return { v: 0, t: { kind: "void" } };
+    }
+    case "peek": {
+      // cin.peek() - look at next character without consuming
+      const ch = ctx.stdin.peek();
+      return { v: ch ?? "", t: { kind: "char" } };
+    }
+    case "get": {
+      // cin.get() - read one character
+      const ch = ctx.stdin.nextChar();
+      return { v: ch ?? "", t: { kind: "char" } };
+    }
+    case "getline": {
+      // cin.getline(str, n) - read up to n-1 chars or newline
+      if (e.args.length < 1) throw new RuntimeError("cin.getline() requires at least one argument", e.line);
+      const target = e.args[0];
+      if (target.node !== "ident") throw new RuntimeError("cin.getline() first argument must be a variable", e.line);
+      const cell = ctx.globals.lookup(target.name);
+      if (!cell) throw new RuntimeError(`undeclared variable '${target.name}'`, e.line);
+      if (cell.type.kind !== "string") throw new RuntimeError("cin.getline() needs a string variable", e.line);
+      
+      const maxLen = e.args.length > 1 ? Math.trunc(toNumber(evaluate(e.args[1], ctx.globals, ctx), e.line)) : 1000;
+      let result = "";
+      for (let i = 0; i < maxLen - 1; i++) {
+        const ch = ctx.stdin.nextChar();
+        if (ch === null || ch === "\n") break;
+        result += ch;
+      }
+      // If we stopped at newline, consume it
+      if (ctx.stdin.peek() === "\n") ctx.stdin.nextChar();
+      
+      cell.value = result;
+      return { v: 0, t: { kind: "void" } };
+    }
+    case "ws": {
+      // cin.ws() - skip whitespace
+      while (true) {
+        const ch = ctx.stdin.peek();
+        if (ch === null) break;
+        if (ch !== " " && ch !== "\t" && ch !== "\n" && ch !== "\r") break;
+        ctx.stdin.nextChar();
+      }
+      return { v: 0, t: { kind: "void" } };
+    }
+    case "good": {
+      // cin.good() - check if stream is in good state
+      return { v: !ctx.stdin.eof(), t: { kind: "bool" } };
+    }
+    case "eof": {
+      // cin.eof() - check if end of file
+      return { v: ctx.stdin.eof(), t: { kind: "bool" } };
+    }
+    case "fail": {
+      // cin.fail() - check if stream has failed
+      return { v: ctx.stdin.eof(), t: { kind: "bool" } };
+    }
+    default:
+      throw new RuntimeError(`cin.${e.name}() is not supported in this C++ subset`, e.line);
+  }
+}
+
 /* --------------------------------- methods --------------------------------- */
 
 function callMethod(e: Expr & { node: "method" }, scope: Scope, ctx: Ctx): Val {
+  // Special handling for cin member functions
+  if (e.obj.node === "ident" && e.obj.name === "cin") {
+    return handleCinMethod(e, ctx);
+  }
+  
   const obj = evaluate(e.obj, scope, ctx);
   const I = (v: number): Val => ({ v, t: { kind: "int" } });
   const B = (v: boolean): Val => ({ v, t: { kind: "bool" } });
