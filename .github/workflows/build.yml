@@ -42,6 +42,15 @@ jobs:
       - name: Generate Android project
         run: npx cap add android
 
+      - name: Generate Android app icons
+        run: |
+          mkdir -p resources
+          if [ -f resources/icon.jpg ] && [ ! -f resources/icon.png ]; then
+            sudo apt-get install -y imagemagick >/dev/null 2>&1 || true
+            convert resources/icon.jpg -resize 1024x1024^ -gravity center -extent 1024x1024 resources/icon.png
+          fi
+          npx --yes @capacitor/assets@3 generate --android --iconBackgroundColor '#0b1220'
+
       - name: Sync Android project
         run: npx cap sync android
 
