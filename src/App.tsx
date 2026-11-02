@@ -19,6 +19,7 @@ import type { Settings } from "./components/SettingsPanel";
 import { ProPopup } from "./components/ProPopup";
 import { LogoMark, IconPlay, IconSpinner, IconCheck, IconError, IconChevron, IconClose, IconPanel, IconCode, IconEraser } from "./components/icons";
 import { setupFileHandler, openFileWithPicker, saveFileWithPicker, isFileSystemAccessSupported } from "./lib/fileSystem";
+import { SaveFileModal } from "./components/SaveFileModal";
 
 type Stage = "idle" | "lex" | "parse" | "exec" | "done" | "error";
 
@@ -58,6 +59,17 @@ export default function App() {
   const [errorLine, setErrorLine] = useState<number | null>(null);
   const [std, setStd] = useState("C++17");
   const [stats, setStats] = useState<Stats | null>(null);
+  const [saveModal, setSaveModal] = useState<{ content: string; suggestedName: string } | null>(null);
+
+  useEffect(() => {
+    const onSaveAs = (ev: Event) => {
+      const d = (ev as CustomEvent).detail as { content: string; suggestedName: string };
+      setSaveModal(d);
+    };
+    window.addEventListener("cclite:save-as", onSaveAs);
+    return () => window.removeEventListener("cclite:save-as", onSaveAs);
+  }, []);
+
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
   const [navOpen, setNavOpen] = useState(false);
@@ -701,6 +713,16 @@ export default function App() {
       
       {/* ================= pro popup ================= */}
       <ProPopup isOpen={proOpen} onClose={() => setProOpen(false)} />
-    </div>
+    
+      {saveModal && (
+        <SaveFileModal
+          initialFilename={saveModal.suggestedName}
+          content={saveModal.content}
+          onClose={() => setSaveModal(null)}
+          onSaved={(msg) => { showToast(msg, "ok"); setSaveModal(null); }}
+          onError={(msg) => showToast(msg, "err")}
+        />
+      )}
+</div>
   );
 }

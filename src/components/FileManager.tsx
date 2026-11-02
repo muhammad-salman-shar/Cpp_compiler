@@ -38,6 +38,14 @@ export function saveFiles(files: SavedFile[]): void {
   }
 }
 
+const KNOWN_EXTS = [".cpp", ".c", ".h", ".hpp", ".cc", ".cxx", ".txt"];
+function ensureExtension(name: string): string {
+  const lower = name.toLowerCase();
+  if (KNOWN_EXTS.some((e) => lower.endsWith(e))) return name;
+  if (lower.includes(".")) return name;
+  return name + ".cpp";
+}
+
 export function FileManager({
   currentCode,
   currentFileName,
@@ -90,14 +98,23 @@ export function FileManager({
   };
 
   const handleRename = (id: string) => {
-    if (renameValue.trim()) {
-      onRenameFile(id, renameValue.trim());
-      setFiles(files.map((f) => 
-        f.id === id ? { ...f, name: renameValue.trim() } : f
-      ));
-    }
+    const raw = renameValue.trim();
     setRenamingId(null);
     setRenameValue("");
+    if (!raw) return;
+    const newName = ensureExtension(raw);
+    if (files.some((f) => f.id !== id && f.name === newName)) {
+      alert(`A file named "${newName}" already exists.`);
+      return;
+    }
+    const target = files.find((f) => f.id === id);
+    if (!target) return;
+    const updated: SavedFile = { ...target, name: newName, lastModified: Date.now() };
+    setFiles(files.map((f) => (f.id === id ? updated : f)));
+    onRenameFile(id, newName);
+    if (currentFileName === target.name) {
+      onLoadFile(updated);
+    }
   };
 
   const formatDate = (timestamp: number) => {
