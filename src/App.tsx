@@ -558,7 +558,7 @@ export default function App() {
             <div className="flex h-9 shrink-0 items-center border-b border-ink-700/60 bg-ink-900/70 pl-2 pr-3">
               <div className="flex h-full items-center gap-2 border-x border-t border-ink-700/60 bg-ink-850 px-3 font-mono text-[11.5px] text-mist-200">
                 <span className="h-1.5 w-1.5 rounded-full bg-ember-400" />
-                main.cpp
+                {currentFileName || "untitled.cpp"}
               </div>
               <div className="ml-auto flex items-center gap-3 font-mono text-[10px] text-mist-600">
                 <span className="hidden items-center gap-1 sm:flex">
@@ -667,7 +667,7 @@ export default function App() {
           <span className={`h-2 w-2 rounded-full transition-colors ${statusDot}`} />
           {stage === "error" ? "failed" : running ? "working…" : stage === "done" ? "ready" : "idle"}
         </span>
-        <span className="hidden text-mist-600 sm:inline">main.cpp</span>
+        <span className="hidden text-mist-600 sm:inline">{currentFileName || "untitled.cpp"}</span>
         {savedAt && (
           <span key={savedAt} className="entry-in hidden items-center gap-1 text-mist-600 md:flex">
             <IconCheck className="h-3 w-3 text-pulse-500" />
